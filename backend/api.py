@@ -19,6 +19,7 @@ from .sources import canonical, public_url
 from .locking import AlreadyRunning, monitoring_lock
 from .monitor import run_monitor
 from .telegram import recipients, send
+from .prompting import evidence_packet
 
 @asynccontextmanager
 async def lifespan(app):
@@ -133,13 +134,19 @@ class ResearchEdit(BaseModel):
     angle: str = Field(default='',max_length=5000)
     additional_instructions: str = Field(default='',max_length=10000)
     image_instructions: str = Field(default='I will attach story images separately. Ask for any missing permanent references.',max_length=5000)
+    target_duration_seconds: int = Field(default=240,ge=60,le=300)
+    story_format: Literal['auto','explainer','timeline','news_update']='auto'
+    animation_style: Literal['hybrid','motion_graphics','anchor_led']='hybrid'
+    anchor_presence: Literal['balanced','minimal','frequent']='balanced'
 
 @app.get('/api/stories/{id}/prompt-form',dependencies=[Depends(authorized)])
 def prompt_form(id:str,db=Depends(db_session)):
     story=get_story(db,id)
     r=story.research
     articles=list(db.scalars(select(Article).where(Article.story_id==id)))
-    return r.get('editorial_review') or ResearchEdit(summary=r.get('summary',''),confirmed_facts='\n'.join(r.get('confirmed_facts',[])),uncertainties='\n'.join(r.get('uncertainties',[])),sources='\n'.join(a.url for a in articles),angle=r.get('angle','')).model_dump()
+    if r.get('editorial_review'):
+        return ResearchEdit(**r['editorial_review']).model_dump()
+    return ResearchEdit(summary=r.get('summary',''),confirmed_facts='\n'.join(r.get('confirmed_facts',[])),uncertainties='\n'.join(r.get('uncertainties',[])),sources='\n'.join(a.url for a in articles),angle=r.get('angle','')).model_dump()
 
 @app.put('/api/stories/{id}/research',dependencies=[Depends(authorized)])
 def save_research(id:str,body:ResearchEdit,db=Depends(db_session)):
@@ -156,18 +163,30 @@ def generate(id:str,body:ResearchEdit,db=Depends(db_session)):
         raise HTTPException(409,'Explicitly select this story for video before generating a prompt')
     channel=db.get(Setting,'channel')
     template=db.get(Setting,'template')
-    data={'headline':story.title,'region':story.region,'category':story.category,'saved_research':story.research,'editorial_review':body.model_dump(),'source_metadata':[serialize(a) for a in db.scalars(select(Article).where(Article.story_id==id))]}
+    articles=list(db.scalars(select(Article).where(Article.story_id==id).order_by(Article.published_at.desc(),Article.id)))
+    data=evidence_packet(story,articles,body.model_dump(),db.get(Setting,'monitoring').value['max_age_hours'])
     content=Template(template.value['markdown']).substitute(channel_version=channel.version,channel_rules=channel.value['markdown'],story_data=json.dumps(data,ensure_ascii=False,indent=2),image_instructions=body.image_instructions,additional_instructions=body.additional_instructions or 'None')
     picture_template=db.get(Setting,'picture_template')
     if not picture_template:
         raise HTTPException(503,'Reference-picture template is not initialized; run backend.bootstrap')
-    picture_data={'headline':story.title,'category':story.category,'story_context':body.summary,'confirmed_facts':body.confirmed_facts,'uncertainties':body.uncertainties,'suggested_visual_angle':body.angle,'evidence_status':story.research.get('evidence_status','Unverified'),'source_links':body.sources,'box_office':story.research.get('box_office',[]),'record_claims':story.research.get('record_claims',[])}
-    picture_content=Template(picture_template.value['markdown']).substitute(channel_version=channel.version,channel_rules=channel.value['markdown'],story_data=json.dumps(picture_data,ensure_ascii=False,indent=2),image_instructions=body.image_instructions,additional_instructions=body.additional_instructions or 'None')
-    prompt=Prompt(story_id=id,content=content,reference_picture_content=picture_content,channel_version=channel.version)
+    picture_content=Template(picture_template.value['markdown']).substitute(channel_version=channel.version,channel_rules=channel.value['markdown'],story_data=json.dumps(data,ensure_ascii=False,indent=2),image_instructions=body.image_instructions,additional_instructions=body.additional_instructions or 'None')
+    prompt=Prompt(story_id=id,content=content,reference_picture_content=picture_content,channel_version=channel.version,readiness=data['readiness'])
     db.add(prompt)
     story.research={**story.research,'editorial_review':body.model_dump()}
     audit(db,'prompt_generated',id,channel_version=channel.version,outputs=['news_story','reference_picture'],template_version=template.version,picture_template_version=picture_template.version)
     db.commit()
+    return serialize(prompt)
+
+@app.get('/api/stories/{id}/prompts',dependencies=[Depends(authorized)])
+def prompt_history(id:str,db=Depends(db_session)):
+    get_story(db,id)
+    rows=db.execute(select(Prompt.id,Prompt.created_at,Prompt.channel_version,Prompt.reference_picture_content!='').where(Prompt.story_id==id).order_by(Prompt.created_at.desc(),Prompt.id.desc()).limit(20))
+    return [{'id':row[0],'created_at':row[1],'channel_version':row[2],'has_picture':row[3]} for row in rows]
+
+@app.get('/api/prompts/{id}',dependencies=[Depends(authorized)])
+def saved_prompt(id:str,db=Depends(db_session)):
+    prompt=db.get(Prompt,id)
+    if not prompt: raise HTTPException(404,'Prompt not found')
     return serialize(prompt)
 
 @app.get('/api/prompts/{id}/download',dependencies=[Depends(authorized)])

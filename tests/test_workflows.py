@@ -297,6 +297,111 @@ def test_box_office_mixed_context_remains_ambiguous():
     assert all(f['measure'] is None and f['territory'] is None for f in figures)
     assert {f['amount'] for f in figures}=={'100','200'}
 
+def test_factory_is_not_an_actor_story():
+    source=Source(region='india',category='national')
+    assert classify('New factory production and contractor hiring announced',source)[1]=='national'
+    assert classify('Actor announces new film release',source)[1]=='entertainment'
+
+def test_undated_coverage_cannot_trigger_automatic_alert(db):
+    configure(db)
+    class Undated:
+        def collect(self,s): return [{**FixtureAdapter().collect(s)[0],'published_at':None}]
+    run_monitor({'rss':Undated()})
+    story=db.scalar(select(Story))
+    assert story.scoring['independent_origins']==2
+    assert not story.scoring['eligible']
+    assert db.scalar(select(func.count()).select_from(Notification))==0
+
+def test_expired_global_alert_is_rescored_without_new_coverage(db,client):
+    configure(db,region='global')
+    class Disaster:
+        def collect(self,s): return [{**FixtureAdapter().collect(s)[0],'title':'Major earthquake disaster overseas'}]
+    run_monitor({'rss':Disaster()})
+    story=db.scalar(select(Story))
+    assert len(client.get('/api/stories?region=global').json())==1
+    old=(datetime.now(timezone.utc)-timedelta(days=10)).isoformat()
+    for article in db.scalars(select(Article)):
+        article.published_at=old;article.retrieved_at=old
+    story.updated_at=old
+    db.commit()
+    class Empty:
+        def collect(self,s): return []
+    run_monitor({'rss':Empty()})
+    db.expire_all()
+    assert not db.get(Story,story.id).scoring['eligible']
+    assert client.get('/api/stories?region=global').json()==[]
+
+def test_non_receipts_are_not_box_office_figures():
+    for title in ['Actor charges INR 100 crore fee', 'Film budget INR 200 crore', 'Film attracts 10 million views', 'Film budget INR 100 crore versus collection INR 80 crore']:
+        a=Article(title=title,summary='',publisher='Trade',url='https://example.com/finance',published_at=now())
+        assert box_figures([a])==[]
+
+def test_prompt_snapshot_uses_current_edits_and_shared_source_context(db,client):
+    configure(db)
+    run_monitor({'rss':FixtureAdapter()})
+    story=db.scalar(select(Story))
+    story.research={**story.research,'editorial_review':{'summary':'OBSOLETE EDITOR COPY'}}
+    story.status='selected';db.commit()
+    form=client.get(f'/api/stories/{story.id}/prompt-form').json()
+    # Defaults must be filled when opening edits saved before preferences existed.
+    assert form['target_duration_seconds']==240 and form['animation_style']=='hybrid'
+    form.update(summary='CURRENT EDITOR SUMMARY',target_duration_seconds=90,story_format='timeline',animation_style='motion_graphics',anchor_presence='minimal')
+    result=client.post(f'/api/stories/{story.id}/prompt',json=form)
+    assert result.status_code==200
+    bundle=result.json()
+    for key in ('content','reference_picture_content'):
+        content=bundle[key]
+        assert 'OBSOLETE EDITOR COPY' not in content
+        assert content.count('CURRENT EDITOR SUMMARY')==1
+        assert '"source_ref": "S1"' in content and '"retrieved_at"' in content
+        assert '"target_duration_seconds": 90' in content and '"animation_style": "motion_graphics"' in content
+        assert '"anchor_presence": "minimal"' in content
+    assert bundle['readiness']['warnings']
+    form['target_duration_seconds']=900
+    assert client.post(f'/api/stories/{story.id}/prompt',json=form).status_code==422
+    form['target_duration_seconds']=90;form['animation_style']='unknown'
+    assert client.post(f'/api/stories/{story.id}/prompt',json=form).status_code==422
+
+def test_prompt_history_restores_immutable_snapshots_and_requires_auth(db,client):
+    configure(db)
+    run_monitor({'rss':FixtureAdapter()})
+    story=db.scalar(select(Story))
+    client.patch(f'/api/stories/{story.id}/decision',json={'status':'selected'})
+    form=client.get(f'/api/stories/{story.id}/prompt-form').json()
+    form['summary']='FIRST SAVED SNAPSHOT'
+    first=client.post(f'/api/stories/{story.id}/prompt',json=form).json()
+    form['summary']='SECOND SAVED SNAPSHOT'
+    second=client.post(f'/api/stories/{story.id}/prompt',json=form).json()
+    history=client.get(f'/api/stories/{story.id}/prompts').json()
+    assert [p['id'] for p in history]==[second['id'],first['id']]
+    assert all(p['has_picture'] for p in history)
+    assert all('content' not in p for p in history)
+    restored=client.get('/api/prompts/'+first['id']).json()
+    assert restored['content']==first['content']
+    assert restored['reference_picture_content']==first['reference_picture_content']
+    assert restored['readiness']==first['readiness'] and restored['readiness']['warnings']
+    assert 'SECOND SAVED SNAPSHOT' not in restored['content']
+    assert client.get('/api/prompts/missing').status_code==404
+    assert client.get('/api/stories/missing/prompts').status_code==404
+    client.cookies.clear()
+    assert client.get('/api/prompts/'+first['id']).status_code==401
+    assert client.get(f'/api/stories/{story.id}/prompts').status_code==401
+
+def test_headline_only_prompt_warns_and_retains_sources(db,client):
+    configure(db)
+    class Headlines:
+        def collect(self,s): return [{**FixtureAdapter().collect(s)[0],'summary':''}]
+    run_monitor({'rss':Headlines()})
+    story=db.scalar(select(Story))
+    client.patch(f'/api/stories/{story.id}/decision',json={'status':'selected'})
+    form=client.get(f'/api/stories/{story.id}/prompt-form').json()
+    form['sources']=''
+    data=client.post(f'/api/stories/{story.id}/prompt',json=form).json()
+    assert any('Headline discovery only' in w for w in data['readiness']['warnings'])
+    assert any('source-links field is empty' in w for w in data['readiness']['warnings'])
+    assert 'https://example.com/' in data['reference_picture_content']
+    assert '"evidence_type": "headline_only"' in data['reference_picture_content']
+
 @pytest.mark.parametrize('code,payload,expected',[(429,{'parameters':{'retry_after':90}},'pending'),(500,{},'pending'),(403,{},'failed'),(200,{'ok':True},'sent')])
 def test_telegram_responses(monkeypatch,code,payload,expected):
     monkeypatch.setattr(env,'telegram_chat_ids','123')
@@ -328,6 +433,7 @@ def test_migrations_roundtrip():
     with Session() as db:
         saved=db.get(Prompt,'old-prompt')
         assert saved.content=='Keep this original prompt' and saved.reference_picture_content==''
+        assert saved.readiness=={}
     from sqlalchemy import inspect
     assert 'articles' in inspect(engine).get_table_names()
     command.downgrade(cfg,'base')

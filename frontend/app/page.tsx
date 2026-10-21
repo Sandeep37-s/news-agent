@@ -3,13 +3,16 @@ import {useEffect,useRef,useState} from 'react';
 
 type Article={id:string;title:string;publisher:string;url:string;published_at:string|null;event_at:string|null;retrieved_at:string;origin_group:string};
 type Story={id:string;title:string;region:string;category:string;subcategory:string;status:string;score:number;updated_at:string;research:Record<string,any>;scoring:Record<string,any>;articles?:Article[]};
-type Form={summary:string;sources:string;confirmed_facts:string;uncertainties:string;angle:string;additional_instructions:string;image_instructions:string};
-const blank:Form={summary:'',sources:'',confirmed_facts:'',uncertainties:'',angle:'',additional_instructions:'',image_instructions:'I will attach story images separately. Ask for missing permanent references.'};
+type Form={summary:string;sources:string;confirmed_facts:string;uncertainties:string;angle:string;additional_instructions:string;image_instructions:string;target_duration_seconds:number;story_format:'auto'|'explainer'|'timeline'|'news_update';animation_style:'hybrid'|'motion_graphics'|'anchor_led';anchor_presence:'balanced'|'minimal'|'frequent'};
+type PromptSummary={id:string;created_at:string;channel_version:number;has_picture:boolean};
+const textFields=['summary','sources','confirmed_facts','uncertainties','angle','additional_instructions','image_instructions'] as const;
+const blank:Form={summary:'',sources:'',confirmed_facts:'',uncertainties:'',angle:'',additional_instructions:'',image_instructions:'I will attach story images separately. Ask for missing permanent references.',target_duration_seconds:240,story_format:'auto',animation_style:'hybrid',anchor_presence:'balanced'};
 const label=(s:string)=>s.replaceAll('_',' ');
 
 async function api(path:string,method='GET',body?:unknown){
   const response=await fetch('/api'+path,{method,headers:{'Content-Type':'application/json','X-Studio-Action':'1'},...(body===undefined?{}:{body:JSON.stringify(body)})});
-  const data=await response.json();
+  const raw=await response.text();
+  let data;try{data=JSON.parse(raw);}catch{throw new Error('The studio could not reach its backend. Check that it is running, then retry.');}
   if(!response.ok) throw new Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail||'Request failed'));
   return data;
 }
@@ -21,6 +24,8 @@ export default function Studio(){
   const [form,setForm]=useState<Form>(blank),[prompt,setPrompt]=useState<any>(null),[settings,setSettings]=useState<any>(null),[settingsText,setSettingsText]=useState('');
   const [sources,setSources]=useState<any[]>([]),[sourceEdit,setSourceEdit]=useState(''),[sourceId,setSourceId]=useState(''),[runs,setRuns]=useState<any[]>([]),[notes,setNotes]=useState<any[]>([]);
   const previewRef=useRef<HTMLElement>(null);
+  const storyRequest=useRef(0),listRequest=useRef(0);
+  const [history,setHistory]=useState<PromptSummary[]>([]);
   const [copyStatus,setCopyStatus]=useState<{kind:string;message:string}|null>(null);
   const [promptTab,setPromptTab]=useState<'news_story'|'reference_picture'>('news_story');
   const [connections,setConnections]=useState<{prompt_builder:boolean;telegram:boolean;ai_research:boolean}|null>(null);
@@ -28,9 +33,15 @@ export default function Studio(){
   const date=(value:string|null|undefined)=>value?new Date(value).toLocaleString('en-IN',{timeZone:overview?.timezone||'Asia/Kolkata',dateStyle:'medium',timeStyle:'short'}):'Not established';
 
   async function refresh(){const [o,ss,c]=await Promise.all([api('/overview'),api('/settings'),api('/connections')]);setOverview(o);setSettings(ss);setConnections(c);setSettingsText(JSON.stringify(ss.monitoring.value,null,2));}
-  async function loadStories(){const params=new URLSearchParams({q:query,category:view==='Entertainment'?'entertainment':category,region:view==='Global alerts'?'global':view==='Indian news'||view==='Entertainment'?'india':'',subcategory:sub,status});setStories(await api('/stories?'+params));}
+  async function loadStories(){const params=new URLSearchParams({q:query,category:view==='Entertainment'?'entertainment':category,region:view==='Global alerts'?'global':view==='Indian news'||view==='Entertainment'?'india':'',subcategory:sub,status});const request=++listRequest.current;const rows=await api('/stories?'+params);if(request===listRequest.current)setStories(rows);}
   async function act(work:()=>Promise<void>){setBusy(true);setError('');setNotice('');try{await work();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
-  async function openStory(id:string){const [s,f]=await Promise.all([api('/stories/'+id),api('/stories/'+id+'/prompt-form')]);setStory(s);setForm(f);setPrompt(null);}
+  async function openStory(id:string){
+    const request=++storyRequest.current;
+    const [s,f,h]=await Promise.all([api('/stories/'+id),api('/stories/'+id+'/prompt-form'),api('/stories/'+id+'/prompts')]);
+    const latest=h.length?await api('/prompts/'+h[0].id):null;
+    if(request!==storyRequest.current)return;
+    setStory(s);setForm({...blank,...f});setHistory(h);setPrompt(latest);
+  }
   useEffect(()=>{setCopyStatus(null);setPromptTab('news_story');if(prompt)previewRef.current?.scrollIntoView({behavior:'smooth',block:'start'});},[prompt]);
   async function generatePrompt(){
     if(!story)return;
@@ -41,11 +52,13 @@ export default function Studio(){
     }
     const generated=await api('/stories/'+story.id+'/prompt','POST',currentForm);
     setPrompt(generated);
+    setHistory(await api('/stories/'+story.id+'/prompts'));
     setNotice('Your news-story and reference-picture prompts are ready. Copy either one or both into Claude.');
   }
   async function copyPrompt(kind:'news_story'|'reference_picture'|'complete'){
     if(!prompt)return;
     const title=kind==='complete'?'Both prompts':kind==='news_story'?'News-story prompt':'Reference-picture prompt';
+    if(kind!=='news_story'&&!prompt.reference_picture_content)throw new Error('This older record has no picture prompt. Generate a new pair.');
     const content=kind==='complete'?prompt.content+'\n\n---\n\n'+prompt.reference_picture_content:kind==='news_story'?prompt.content:prompt.reference_picture_content;
     try{
       await navigator.clipboard.writeText(content);
@@ -56,14 +69,14 @@ export default function Studio(){
     }
   }
   useEffect(()=>{api('/overview').then(async o=>{setSigned(true);setOverview(o);await refresh();const id=new URLSearchParams(location.search).get('story');if(id)await openStory(id);}).catch(()=>{}).finally(()=>setChecking(false));},[]);
-  useEffect(()=>{if(!signed)return;let canceled=false;const timer=setTimeout(()=>{loadStories().catch(e=>{if(!canceled)setError(e.message)});},200);return()=>{canceled=true;clearTimeout(timer)};},[signed,view,query,category,sub,status]);
+  useEffect(()=>{if(!signed)return;let canceled=false;const timer=setTimeout(()=>{loadStories().catch(e=>{if(!canceled)setError(e.message)});},200);return()=>{canceled=true;++listRequest.current;clearTimeout(timer)};},[signed,view,query,category,sub,status]);
   useEffect(()=>{if(!signed)return;act(async()=>{if(view==='Settings')setSources(await api('/sources'));if(view==='Activity'){const [r,n]=await Promise.all([api('/runs'),api('/notifications')]);setRuns(r);setNotes(n);}});},[view,signed]);
 
   if(checking)return <main className="login"><div className="brand">दृष्टि <span>DRISHTI</span></div><p>Opening your editorial desk…</p></main>;
   if(!signed)return <main className="login"><div className="login-card"><div className="brand">दृष्टि <span>DRISHTI</span></div><p className="eyebrow">HINDI NEWS DISCOVERY STUDIO</p><h1>A clearer view.<br/>A stronger story.</h1><p>Research Indian news, follow cinema, and prepare your next Hindi documentary.</p><form onSubmit={e=>{e.preventDefault();act(async()=>{await api('/login','POST',{password});setPassword('');await refresh();setSigned(true);});}}><label>Administrator password<input type="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="primary" disabled={busy}>Open the studio →</button></form>{error&&<p role="alert" className="error">{error}</p>}<small>Private editorial workspace · Human approval at every stage</small></div></main>;
 
   const navigate=(v:string)=>{setView(v);setCategory('');setSub('');setStatus('');setQuery('');};
-  const select=async(value:string)=>{if(!story)return;await api('/stories/'+story.id+'/decision','PATCH',{status:value});await openStory(story.id);await loadStories();setNotice('Editorial decision saved.');};
+  const select=async(value:string)=>{if(!story)return;await api('/stories/'+story.id+'/decision','PATCH',{status:value});setStory({...story,status:value});await loadStories();setNotice('Editorial decision saved. Your current form edits are retained.');};
   return <div className="shell">
     <aside className="sidebar"><div className="brand">दृष्टि <span>DRISHTI</span></div><p className="sidebar-caption">THE EDITORIAL DESK</p><nav>{['Overview','Indian news','Entertainment','Global alerts','Prompt builder','Activity','Settings'].map((v,i)=><button key={v} className={view===v?'nav active':'nav'} onClick={()=>navigate(v)}><span>{['◫','◉','✦','◎','▤','↻','⚙'][i]}</span>{v}</button>)}</nav><div className="sidebar-bottom"><span className="live-dot"/> Phase 1 · Discovery<br/><small>Research. Review. Create with intent.</small><button className="text-button" onClick={()=>act(async()=>{await api('/logout','POST');setSigned(false);})}>Sign out ↗</button></div></aside>
     <main className="workspace"><header><div className="breadcrumb">WORKSPACE <span>/</span> {view.toUpperCase()}</div><div className="header-meta">Hindi channel <span className="avatar">हि</span></div></header>
@@ -75,7 +88,7 @@ export default function Studio(){
         <section className="panel">
           <h2>01 / Choose your story</h2>
           <p>Get two text prompts: the news story and its reference picture. Give them to your Claude video agent. No API token is needed to prepare these prompts.</p>
-          <select aria-label="Choose story for prompt" value={story?.id||''} onChange={e=>{if(e.target.value)act(()=>openStory(e.target.value));else{setStory(null);setPrompt(null);}}}>
+          <select aria-label="Choose story for prompt" value={story?.id||''} disabled={busy} onChange={e=>{if(e.target.value)act(()=>openStory(e.target.value));else{++storyRequest.current;setStory(null);setPrompt(null);setHistory([]);}}}>
             <option value="">Select a story…</option>{story&&!stories.some(s=>s.id===story.id)&&<option value={story.id}>{story.title}</option>}{stories.map(s=><option value={s.id} key={s.id}>{s.title}</option>)}
           </select>
           {story&&<>
@@ -83,7 +96,17 @@ export default function Studio(){
             <p className="muted">{label(story.status)} · You choose the story. Claude handles the video.</p>
             {story.status!=='selected'&&<p className="notice">Review the fields below. The final button selects this story and prepares both prompts.</p>}
             <h2>02 / Edit the story and picture direction</h2>
-            {(Object.keys(blank) as (keyof Form)[]).map(key=><label key={key}>{key==='image_instructions'?'Reference-picture direction':label(key)}<textarea rows={key==='summary'||key==='sources'?5:3} value={form[key]} onChange={e=>{setForm({...form,[key]:e.target.value});setPrompt(null);}}/></label>)}
+            <fieldset className="production-options" disabled={busy}>
+              <legend>Video direction for Claude</legend>
+              <p>These choices guide the prompts. Rendering tools and approved reference images are checked separately in Claude.</p>
+              <div className="option-grid">
+                <label>Target length<select value={form.target_duration_seconds} onChange={e=>{setForm({...form,target_duration_seconds:Number(e.target.value)});setPrompt(null);}}>{[60,90,120,180,240,300].map(n=><option key={n} value={n}>{n/60} minutes</option>)}</select></label>
+                <label>Story structure<select value={form.story_format} onChange={e=>{setForm({...form,story_format:e.target.value as Form['story_format']});setPrompt(null);}}><option value="auto">Choose for this story</option><option value="explainer">Background and explanation</option><option value="timeline">Chronological timeline</option><option value="news_update">Latest news update</option></select></label>
+                <label>2D animation style<select value={form.animation_style} onChange={e=>{setForm({...form,animation_style:e.target.value as Form['animation_style']});setPrompt(null);}}><option value="hybrid">Layered 2D + motion graphics</option><option value="motion_graphics">Maps, charts and motion graphics</option><option value="anchor_led">Anchor-led with story cutaways</option></select></label>
+                <label>Anchor screen time<select value={form.anchor_presence} onChange={e=>{setForm({...form,anchor_presence:e.target.value as Form['anchor_presence']});setPrompt(null);}}><option value="balanced">Balanced — intro, explanation, close</option><option value="minimal">Minimal — brief intro and close</option><option value="frequent">Frequent — between story sections</option></select></label>
+              </div>
+            </fieldset>
+            {textFields.map(key=><label key={key}>{key==='image_instructions'?'Reference-picture direction':label(key)}<textarea disabled={busy} rows={key==='summary'||key==='sources'?5:3} value={form[key]} onChange={e=>{setForm({...form,[key]:e.target.value});setPrompt(null);}}/></label>)}
             <button disabled={busy} onClick={()=>act(async()=>{await api('/stories/'+story.id+'/research','PUT',form);setNotice('Your story and picture direction are saved.');})}>Save edits</button>
             <details><summary>Permanent channel rules · version {settings?.channel.version}</summary><pre>{settings?.channel.value.markdown}</pre></details>
             <div aria-live="polite">{error&&<p className="error">{error}</p>}</div>
@@ -94,13 +117,16 @@ export default function Studio(){
           <p className="eyebrow">COPY INTO YOUR CLAUDE VIDEO AGENT</p>
           <h2>03 / Your two prompts</h2>
           <p>The picture prompt is text describing the reference illustration. Attach any actual anchor, newsroom or story images separately in Claude.</p>
+          {history.length>0&&<label>Saved prompts — latest 20<select aria-label="Saved prompt versions" disabled={busy} value={prompt?.id||''} onChange={e=>{if(e.target.value)act(async()=>{setPrompt(await api('/prompts/'+e.target.value));setNotice('Saved snapshot opened. Your current form edits are unchanged.');});}}><option value="">Choose a saved snapshot…</option>{history.map(p=><option key={p.id} value={p.id}>{date(p.created_at)} · Channel v{p.channel_version}{p.has_picture?' · two prompts':' · story only'}</option>)}</select></label>}
           {prompt?<>
-            <div className="notice" role="status">2 prompts ready · Saved together</div>
-            <div className="actions"><button className="primary" onClick={()=>act(()=>copyPrompt('complete'))}>Copy both prompts</button><a className="button" href={'/api/prompts/'+prompt.id+'/download?kind=complete'}>Download both</a></div>
+            <div className="notice" role="status">{prompt.reference_picture_content?'2 prompts ready · Saved together':'Older snapshot · News-story prompt only'}</div>
+            <p className="muted">Saved {date(prompt.created_at)} · Channel rules v{prompt.channel_version}. This is a saved snapshot; generate again to apply current edits and rules.</p>
+            {prompt.readiness?.warnings?.length>0&&<div className="research-gaps"><strong>Research gaps to resolve in Claude</strong><ul>{prompt.readiness.warnings.map((w:string)=><li key={w}>{w}</li>)}</ul></div>}
+            <div className="actions"><button className="primary" disabled={!prompt.reference_picture_content} onClick={()=>act(()=>copyPrompt('complete'))}>Copy both prompts</button>{prompt.reference_picture_content&&<a className="button" href={'/api/prompts/'+prompt.id+'/download?kind=complete'}>Download both</a>}</div>
             {copyStatus?.kind==='complete'&&<p className="notice" role="status">{copyStatus.message}</p>}
             <div className="prompt-tabs" role="tablist" aria-label="Generated prompts">
               <button id="news-prompt-tab" role="tab" aria-selected={promptTab==='news_story'} aria-controls="news-prompt-panel" onClick={()=>setPromptTab('news_story')}>1. News-story prompt</button>
-              <button id="picture-prompt-tab" role="tab" aria-selected={promptTab==='reference_picture'} aria-controls="picture-prompt-panel" onClick={()=>setPromptTab('reference_picture')}>2. Reference-picture prompt</button>
+              <button id="picture-prompt-tab" disabled={!prompt.reference_picture_content} role="tab" aria-selected={promptTab==='reference_picture'} aria-controls="picture-prompt-panel" onClick={()=>setPromptTab('reference_picture')}>2. Reference-picture prompt</button>
             </div>
             <div id={promptTab==='news_story'?'news-prompt-panel':'picture-prompt-panel'} role="tabpanel" aria-labelledby={promptTab==='news_story'?'news-prompt-tab':'picture-prompt-tab'}>
               <h3>{promptTab==='news_story'?'News-story prompt':'Reference-picture prompt'}</h3>

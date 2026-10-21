@@ -78,8 +78,9 @@ def run_monitor(adapters=None,sender=None):
                     story.research={**story.research,'editorial_review':previous['editorial_review']}
                 story.updated_at=now()
                 db.commit()
-            # Re-evaluate all recent stories so configuration changes can enable an alert without re-ingestion.
-            for story in db.scalars(select(Story).where(Story.updated_at>=cutoff)):
+            # Age every stored score, including unchanged stories that have now expired.
+            # Otherwise old global alerts can remain visible with a stale eligible flag.
+            for story in db.scalars(select(Story)):
                 articles=list(db.scalars(select(Article).where(Article.story_id==story.id)))
                 if articles:
                     _,story.category,story.subcategory=classify(story.title,sources[articles[0].source_id])

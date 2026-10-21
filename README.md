@@ -47,6 +47,8 @@ You choose the story. You review the evidence. You approve production and publis
 - **Prompt builder:** generate a **news-story prompt** and a **reference-picture prompt**. Copy/download either separately or both together for your Claude video agent. **No API token is needed for prompt generation.**
 - **Channel Bible:** save your Hindi language, fictional illustrated anchor, visual identity, narration preferences, and approval workflow once.
 - **Consistent 2D presentation:** permanent anchor/newsroom references, story pacing, layered illustrations, limited character animation, maps, timelines and charts are included in both prompts. The downstream agent checks available references and tools before production; the studio supplies text only.
+- **Episode direction:** choose target length, story structure, 2D animation style and anchor screen time. Both prompts receive the same current evidence snapshot, source IDs, dates and research-gap notes.
+- **Saved prompt versions:** reopen the latest 20 snapshots per story, with separate/combined copy and downloads. Older story-only records stay accessible; regenerate to add a picture prompt and apply current rules.
 - **Telegram:** receive eligible alerts through your own configured bot, with delivery tracking, retry handling, and duplicate suppression.
 - **Activity and settings:** review monitoring results, source errors, connection status, and persistent configuration.
 
@@ -55,9 +57,9 @@ You choose the story. You review the evidence. You approve production and publis
 
 <br />
 
-<img src="docs/prompt-ready.png" alt="A complete production prompt saved in Drishti, with Copy Complete Prompt, Markdown download, and clipboard success feedback" width="900" />
+<img src="docs/prompt-ready.png" alt="Drishti prompt builder with episode direction controls, saved prompt versions and research-gap notes" width="900" />
 
-The news-story prompt includes research evidence, your edits, source links, the Channel Bible, and production instructions. The separate reference-picture prompt describes the story-specific illustration. Attach reference images separately in Claude; copying text does not transfer image files. The screenshot above shows the earlier single-prompt layout; the current builder has two tabs and separate/combined copy and download controls.
+The news-story prompt includes research evidence, your edits, source links, the Channel Bible, and production instructions. The separate reference-picture prompt describes the story-specific illustration. Attach reference images separately in Claude; copying text does not transfer image files. Use the two tabs and separate/combined copy and download controls for the handoff.
 
 </details>
 
@@ -185,7 +187,7 @@ Database/process locks prevent overlapping monitor runs. Research and decisions 
 
 ## Verification
 
-**29 automated tests passed locally**, and the production Next.js build passed. Browser checks also confirmed story review, both prompt tabs, and picture/combined clipboard feedback. Tests cover separate/combined downloads and migration preserving older saved story prompts. These are recorded development checks, not a hosted CI badge.
+**36 automated tests passed locally**, and the production Next.js build passed. Tests cover current-edits-only evidence snapshots, production preference validation, authenticated prompt-history retrieval, headline-only research warnings, separate/combined downloads, legacy prompt preservation, stale global alert expiry, undated alert suppression, category boundaries and conservative box-office candidates. These are recorded development checks, not a hosted CI badge.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q

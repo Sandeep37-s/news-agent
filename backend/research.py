@@ -11,9 +11,15 @@ def box_figures(articles):
     figures=[]
     for a in articles:
         text=a.title+' '+a.summary
+        # Money mentioned in a film story may be a budget, salary or investment.
+        # Only expose receipts candidates, and leave mixed financial context for review.
+        if not re.search(r'\bbox.office\b|\bcollections?\b|\bgross\b|\bnet\b|कमाई|कलेक्शन|बॉक्स\s*ऑफिस',text,re.I):
+            continue
         for match in list(re.finditer(r'(?:₹|Rs\.?|INR|USD|\$)?\s*(\d+(?:\.\d+)?)\s*(crore|crores|million|billion|करोड़)\b',text,re.I))[:8]:
             context=text[max(0,match.start()-70):match.end()+70]
             low=context.lower()
+            if re.search(r'\bbudget\b|\bfees?\b|\bsalary\b|\binvestment\b|\bfollowers?\b|\bviews?\b|बजट|फीस',low):
+                continue
             # Nearby figures may use incompatible measures. Preserve ambiguity rather
             # than attaching the first territory/period found to every number.
             currencies={code for code,pattern in [('INR',r'₹|\bRs\.?|\bINR\b'),('USD',r'\bUSD\b|\$')] if re.search(pattern,context,re.I)}

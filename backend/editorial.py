@@ -25,7 +25,7 @@ def classify(title,source):
     if region=='global' and re.search(r'\b(india|indian|delhi|mumbai|modi)\b|भारत|भारतीय',t):
         region='india'
     if region=='india' and category in ('national','world'):
-        if re.search(r'bollywood|cinema|box.office|film|movie|actor|actress|बॉलीवुड|फिल्म',t): category='entertainment'
+        if re.search(r'\b(?:bollywood|cinema|box.office|films?|movies?|actors?|actress(?:es)?)\b|बॉलीवुड|फिल्म',t): category='entertainment'
         elif re.search(r'\bipo\b|economy|stock|business|bank|inflation',t): category='business'
         elif re.search(r'science|space|isro|research|वैज्ञानिक',t): category='science'
         elif re.search(r'court|judgment|अदालत',t): category='courts'
@@ -54,7 +54,7 @@ def rank(story,articles,sources,settings):
     values={'freshness':max(0,1-age/settings['max_age_hours']),'coverage':min(1,len(articles)/5),'growth':min(1,recent/prior/3),'independence':min(1,len(origins)/3),'importance':1 if important else 0.25,'india':1 if story.region=='india' else 0,'evidence':1 if reliable else 0.2,'explainability':0.7}
     contributions={k:round(v*settings['weights'][k],2) for k,v in values.items()}
     score=round(sum(contributions.values())/max(1,sum(settings['weights'].values()))*100,1)
-    eligible=reliable and age<=settings['max_age_hours'] and story.subcategory!='excluded_gossip' and (story.region!='global' or important)
+    eligible=bool(dates) and reliable and age<=settings['max_age_hours'] and story.subcategory!='excluded_gossip' and (story.region!='global' or important)
     return score,{'contributions':contributions,'independent_origins':len(origins),'publisher_count':len({a.publisher for a in articles}),'primary_source':primary,'eligible':eligible,'importance_signal':important,'age_hours':round(age,1),'explanation':'Heuristic ranking, not a factual confidence score. Independence requires administrator-reviewed provenance; unknown origins do not count.'}
 
 def research(story,articles):

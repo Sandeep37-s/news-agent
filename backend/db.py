@@ -97,6 +97,7 @@ class Prompt(Base):
     story_id: Mapped[str] = mapped_column(ForeignKey('stories.id'))
     content: Mapped[str] = mapped_column(Text)
     reference_picture_content: Mapped[str] = mapped_column(Text, default='')
+    readiness: Mapped[dict] = mapped_column(JSON, default=dict)
     channel_version: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[str] = mapped_column(String(40), default=now)
 
