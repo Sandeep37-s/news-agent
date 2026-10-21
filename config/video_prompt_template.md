@@ -36,3 +36,9 @@ $additional_instructions
 ## Requested downstream deliverables
 Final MP4, Hindi script, storyboard, image prompts, project assets, source notes, YouTube title, description, and thumbnail concept.
 This discovery studio has generated only a text brief. Do not claim assets or a rendered video exist until the corresponding work has actually been performed.
+
+## Apply the permanent presentation system
+Before production, inspect the reference files actually accessible in this Claude session. Identify the approved anchor and newsroom assets and the available animation, voice and rendering tools. Do not assume that project instructions, a picture prompt or a filename transfers an image or installs a renderer. Ask for missing essential references once and reuse supplied assets.
+Follow the channel's permanent anchor/environment, story representation and default 2D animation rules above. Use the paired reference-picture prompt as a story visual brief; it does not replace the permanent anchor reference. Prefer layered 2D cut-out animation plus motion graphics in a reusable Remotion project when supported. Do not choose a different animation style randomly each episode.
+At the storyboard approval stage, provide a concise scene table: time/duration, Hindi narration, scene type, exact reference asset, composition/layers, movement, on-screen text, evidence/caveat and sound. Explain why the selected animation method suits the story. Mark new assets as proposed or required until they exist. Use voiceover timing for the final cut.
+Before final delivery, check anchor identity, outfit and proportions; newsroom continuity; Hindi pronunciation and caption spelling; factual dates/figures and essential attribution; readable graphics; audio balance; and the actual exported duration and resolution. Report concrete missing tools or assets instead of claiming completion. Production and publishing approvals remain in the downstream workflow.

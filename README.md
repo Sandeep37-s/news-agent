@@ -46,6 +46,7 @@ You choose the story. You review the evidence. You approve production and publis
 - **Research trail:** keep confirmed facts, attributed claims, uncertainty, and original source records distinct.
 - **Prompt builder:** generate a **news-story prompt** and a **reference-picture prompt**. Copy/download either separately or both together for your Claude video agent. **No API token is needed for prompt generation.**
 - **Channel Bible:** save your Hindi language, fictional illustrated anchor, visual identity, narration preferences, and approval workflow once.
+- **Consistent 2D presentation:** permanent anchor/newsroom references, story pacing, layered illustrations, limited character animation, maps, timelines and charts are included in both prompts. The downstream agent checks available references and tools before production; the studio supplies text only.
 - **Telegram:** receive eligible alerts through your own configured bot, with delivery tracking, retry handling, and duplicate suppression.
 - **Activity and settings:** review monitoring results, source errors, connection status, and persistent configuration.
 
