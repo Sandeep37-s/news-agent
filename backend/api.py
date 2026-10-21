@@ -158,22 +158,30 @@ def generate(id:str,body:ResearchEdit,db=Depends(db_session)):
     template=db.get(Setting,'template')
     data={'headline':story.title,'region':story.region,'category':story.category,'saved_research':story.research,'editorial_review':body.model_dump(),'source_metadata':[serialize(a) for a in db.scalars(select(Article).where(Article.story_id==id))]}
     content=Template(template.value['markdown']).substitute(channel_version=channel.version,channel_rules=channel.value['markdown'],story_data=json.dumps(data,ensure_ascii=False,indent=2),image_instructions=body.image_instructions,additional_instructions=body.additional_instructions or 'None')
-    prompt=Prompt(story_id=id,content=content,channel_version=channel.version)
+    picture_template=db.get(Setting,'picture_template')
+    if not picture_template:
+        raise HTTPException(503,'Reference-picture template is not initialized; run backend.bootstrap')
+    picture_data={'headline':story.title,'category':story.category,'story_context':body.summary,'confirmed_facts':body.confirmed_facts,'uncertainties':body.uncertainties,'suggested_visual_angle':body.angle,'evidence_status':story.research.get('evidence_status','Unverified'),'source_links':body.sources,'box_office':story.research.get('box_office',[]),'record_claims':story.research.get('record_claims',[])}
+    picture_content=Template(picture_template.value['markdown']).substitute(channel_version=channel.version,channel_rules=channel.value['markdown'],story_data=json.dumps(picture_data,ensure_ascii=False,indent=2),image_instructions=body.image_instructions,additional_instructions=body.additional_instructions or 'None')
+    prompt=Prompt(story_id=id,content=content,reference_picture_content=picture_content,channel_version=channel.version)
     db.add(prompt)
     story.research={**story.research,'editorial_review':body.model_dump()}
-    audit(db,'prompt_generated',id,channel_version=channel.version)
+    audit(db,'prompt_generated',id,channel_version=channel.version,outputs=['news_story','reference_picture'],template_version=template.version,picture_template_version=picture_template.version)
     db.commit()
     return serialize(prompt)
 
 @app.get('/api/prompts/{id}/download',dependencies=[Depends(authorized)])
-def download(id:str,db=Depends(db_session)):
+def download(id:str,kind:Literal['news_story','reference_picture','complete']='news_story',db=Depends(db_session)):
     p=db.get(Prompt,id)
     if not p: raise HTTPException(404,'Prompt not found')
-    return PlainTextResponse(p.content,headers={'Content-Disposition':f'attachment; filename="video-prompt-{p.id}.md"'})
+    if kind in ('reference_picture','complete') and not p.reference_picture_content:
+        raise HTTPException(409,'This older record has no picture prompt. Generate both prompts again.')
+    content=p.content if kind=='news_story' else p.reference_picture_content if kind=='reference_picture' else p.content+'\n\n---\n\n'+p.reference_picture_content
+    return PlainTextResponse(content,headers={'Content-Disposition':f'attachment; filename="{kind}-prompt-{p.id}.md"'})
 
 @app.get('/api/settings',dependencies=[Depends(authorized)])
 def settings(db=Depends(db_session)):
-    return {s.key:{'value':s.value,'version':s.version} for s in db.scalars(select(Setting).where(Setting.key.in_(['monitoring','channel','template'])))}
+    return {s.key:{'value':s.value,'version':s.version} for s in db.scalars(select(Setting).where(Setting.key.in_(['monitoring','channel','template','picture_template'])))}
 
 @app.get('/api/connections',dependencies=[Depends(authorized)])
 def connections():
@@ -231,8 +239,8 @@ class Markdown(BaseModel):
 
 @app.put('/api/settings/{key}',dependencies=[Depends(authorized)])
 def update_markdown(key:str,body:Markdown,db=Depends(db_session)):
-    if key not in ('channel','template'): raise HTTPException(404,'Unknown setting')
-    if key=='template':
+    if key not in ('channel','template','picture_template'): raise HTTPException(404,'Unknown setting')
+    if key in ('template','picture_template'):
         template=Template(body.markdown)
         expected={'channel_version','channel_rules','story_data','image_instructions','additional_instructions'}
         if not template.is_valid() or set(template.get_identifiers())!=expected:

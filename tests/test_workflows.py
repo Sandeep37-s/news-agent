@@ -239,6 +239,48 @@ def test_global_below_threshold_hidden_until_deliberate_selection(db,client):
     client.patch('/api/stories/'+raw[0]['id']+'/decision',json={'status':'research_requested'})
     assert len(client.get('/api/stories?region=global').json())==1
 
+def test_story_and_reference_picture_prompts_are_paired_and_downloadable(db,client):
+    configure(db)
+    run_monitor({'rss':FixtureAdapter()})
+    story=db.scalar(select(Story))
+    form=client.get(f'/api/stories/{story.id}/prompt-form').json()
+    form['summary']='The ministry announced a science programme; implementation dates remain unconfirmed.'
+    form['image_instructions']='Use the approved anchor reference; keep space on the right for Hindi captions.'
+    form['additional_instructions']='Keep the narration calm and factual.'
+    client.patch(f'/api/stories/{story.id}/decision',json={'status':'selected'})
+    result=client.post(f'/api/stories/{story.id}/prompt',json=form)
+    assert result.status_code==200
+    bundle=result.json()
+    story_prompt=bundle['content']
+    picture_prompt=bundle['reference_picture_content']
+    assert story.title in story_prompt and story.title in picture_prompt
+    assert form['summary'] in story_prompt and form['summary'] in picture_prompt
+    assert form['image_instructions'] in picture_prompt
+    assert form['additional_instructions'] in picture_prompt
+    assert '16:9' in picture_prompt and '2D anime-inspired' in picture_prompt
+    assert 'not an authentic news photograph' in picture_prompt
+    assert 'Images are NOT transferred' in picture_prompt
+    assert story_prompt!=picture_prompt
+    from backend.db import Prompt
+    saved=db.get(Prompt,bundle['id'])
+    assert saved.reference_picture_content==picture_prompt
+    base='/api/prompts/'+bundle['id']+'/download'
+    assert client.get(base+'?kind=news_story').text==story_prompt
+    assert client.get(base+'?kind=reference_picture').text==picture_prompt
+    assert client.get(base+'?kind=complete').text==story_prompt+'\n\n---\n\n'+picture_prompt
+    assert client.get(base+'?kind=invalid').status_code==422
+
+def test_legacy_prompt_does_not_pretend_to_have_a_picture_prompt(db,client):
+    from backend.db import Prompt
+    story=Story(title='Legacy story',fingerprint='legacy-picture-test',region='india',category='national')
+    db.add(story);db.flush()
+    legacy=Prompt(story_id=story.id,content='Previously saved story prompt',channel_version=1)
+    db.add(legacy);db.commit()
+    path='/api/prompts/'+legacy.id+'/download'
+    assert client.get(path).text=='Previously saved story prompt'
+    assert client.get(path+'?kind=reference_picture').status_code==409
+    assert client.get(path+'?kind=complete').status_code==409
+
 def test_box_office_preserves_measures_and_conflicts():
     a=Article(title='Film opening weekend INR 100 crore worldwide gross',summary='',publisher='Trade A',url='https://example.com/a',published_at=now())
     b=Article(title='Film opening weekend INR 80 crore domestic net',summary='',publisher='Trade B',url='https://example.com/b',published_at=now())
@@ -274,7 +316,18 @@ def test_telegram_timeout_is_uncertain(monkeypatch):
 def test_migrations_roundtrip():
     Base.metadata.drop_all(engine)
     cfg=Config('alembic.ini')
+    command.upgrade(cfg,'001')
+    legacy_story=Story(title='Saved before migration',fingerprint='pre-002',region='india',category='national')
+    with Session() as db:
+        db.add(legacy_story);db.commit()
+    from sqlalchemy import text
+    with engine.begin() as connection:
+        connection.execute(text('INSERT INTO prompts (id, story_id, content, channel_version, created_at) VALUES (:id,:story,:content,1,:created)'),{'id':'old-prompt','story':legacy_story.id,'content':'Keep this original prompt','created':now()})
     command.upgrade(cfg,'head')
+    from backend.db import Prompt
+    with Session() as db:
+        saved=db.get(Prompt,'old-prompt')
+        assert saved.content=='Keep this original prompt' and saved.reference_picture_content==''
     from sqlalchemy import inspect
     assert 'articles' in inspect(engine).get_table_names()
     command.downgrade(cfg,'base')

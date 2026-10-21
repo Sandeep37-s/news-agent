@@ -7,7 +7,7 @@ def bootstrap():
     with Session() as db:
         if not db.get(Setting, 'monitoring'):
             db.add(Setting(key='monitoring', value=json.loads((ROOT/'config/settings.json').read_text())))
-        for key, filename in [('channel','channel_bible.md'),('template','video_prompt_template.md')]:
+        for key, filename in [('channel','channel_bible.md'),('template','video_prompt_template.md'),('picture_template','reference_picture_prompt_template.md')]:
             if not db.get(Setting,key):
                 db.add(Setting(key=key,value={'markdown':(ROOT/'config'/filename).read_text(encoding='utf-8')}))
         if not db.get(Setting, 'sources_initialized'):

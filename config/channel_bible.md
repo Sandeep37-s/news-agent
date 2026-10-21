@@ -16,6 +16,9 @@ Use original or properly licensed assets. Film footage, posters, music, and phot
 Human approval is required at research, Hindi script, storyboard/visual plan, and final video review stages.
 Publishing always requires separate explicit authorization.
 
+## Studio handoff
+The discovery studio supplies two text outputs: a news-story prompt and a story-specific reference-picture prompt. The user copies them into a separate Claude video agent, which handles video production and its approvals. A picture prompt describes the desired illustration; it is not an attached image. The studio does not render pictures, generate voice, make videos or publish them.
+
 ## Original-story workflow
 Treat publisher feeds as private discovery leads. Select only stories with meaningful public interest and sufficient evidence for further production research. Research important claims using original statements, documents and independent reporting before treating them as established facts.
 Develop our own story structure, Hindi narration, explanation and analysis. Do not copy a publisher's script or rewrite it sentence by sentence. News links do not grant permission to reuse articles, footage, film clips, photos or music; use original illustrations and properly licensed assets.

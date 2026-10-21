@@ -44,7 +44,7 @@ You choose the story. You review the evidence. You approve production and publis
 - **Entertainment:** follow releases, industry developments, regional cinema, and attributed box-office or record claims.
 - **Global alerts:** review significant developments separately; a global story needs deliberate selection before a video prompt.
 - **Research trail:** keep confirmed facts, attributed claims, uncertainty, and original source records distinct.
-- **Prompt builder:** edit the brief, generate it, copy the complete text, or download Markdown. **No API token is needed for prompt generation.**
+- **Prompt builder:** generate a **news-story prompt** and a **reference-picture prompt**. Copy/download either separately or both together for your Claude video agent. **No API token is needed for prompt generation.**
 - **Channel Bible:** save your Hindi language, fictional illustrated anchor, visual identity, narration preferences, and approval workflow once.
 - **Telegram:** receive eligible alerts through your own configured bot, with delivery tracking, retry handling, and duplicate suppression.
 - **Activity and settings:** review monitoring results, source errors, connection status, and persistent configuration.
@@ -56,7 +56,7 @@ You choose the story. You review the evidence. You approve production and publis
 
 <img src="docs/prompt-ready.png" alt="A complete production prompt saved in Drishti, with Copy Complete Prompt, Markdown download, and clipboard success feedback" width="900" />
 
-The generated brief includes the research evidence, your edits, source links, the Channel Bible, and production instructions. Attach reference images separately in Claude; copying a text prompt does not transfer image files.
+The news-story prompt includes research evidence, your edits, source links, the Channel Bible, and production instructions. The separate reference-picture prompt describes the story-specific illustration. Attach reference images separately in Claude; copying text does not transfer image files. The screenshot above shows the earlier single-prompt layout; the current builder has two tabs and separate/combined copy and download controls.
 
 </details>
 
@@ -77,7 +77,8 @@ flowchart LR
     B --> C[Rank and save]
     C --> D[Human research review]
     D --> E[Select a story]
-    E --> F[Complete Claude prompt]
+    E --> F[News-story prompt]
+    E --> G[Reference-picture prompt]
 ```
 
 The next stage happens in your **separate production workflow**: research approval → Hindi script approval → storyboard approval → final video review → separate publishing authorization.
@@ -183,7 +184,7 @@ Database/process locks prevent overlapping monitor runs. Research and decisions 
 
 ## Verification
 
-**27 automated tests passed locally**, and the production Next.js build passed. Browser checks also confirmed story review, complete prompt generation, and clipboard feedback. These are recorded development checks, not a hosted CI badge.
+**29 automated tests passed locally**, and the production Next.js build passed. Browser checks also confirmed story review, both prompt tabs, and picture/combined clipboard feedback. Tests cover separate/combined downloads and migration preserving older saved story prompts. These are recorded development checks, not a hosted CI badge.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
