@@ -1,0 +1,17 @@
+{
+  "interval_minutes": 60,
+  "timezone": "Asia/Kolkata",
+  "notification_language": "en",
+  "alert_threshold": 55,
+  "global_threshold": 75,
+  "max_age_hours": 72,
+  "min_independent_sources": 2,
+  "categories": ["national", "regional", "government", "science", "technology", "business", "education", "environment", "courts", "entertainment", "world"],
+  "weights": {"freshness": 20, "coverage": 10, "growth": 10, "independence": 20, "importance": 15, "india": 10, "evidence": 10, "explainability": 5},
+  "ai_enabled": false,
+  "ai_daily_call_limit": 10,
+  "ai_daily_budget_usd": 1.0,
+  "ai_reserved_cost_per_call_usd": 0.1,
+  "ai_input_usd_per_million": 0,
+  "ai_output_usd_per_million": 0
+}

@@ -2,6 +2,8 @@
 
 A working Phase 1 editorial application built in `C:\Users\it\Documents\2d`: Next.js/React/TypeScript dashboard, Python FastAPI backend, SQLAlchemy storage, Alembic migrations, RSS/Atom and configurable JSON API adapters, conservative research, Telegram outbox, and a Claude production-prompt builder. No video generation, rendering, voice generation, or publishing is implemented.
 
+**Installing on another laptop?** Follow [LAPTOP-SETUP.md](LAPTOP-SETUP.md) after cloning this repository. Each machine creates its own private environment and database.
+
 ## Open the installed local application
 
 1. Run `Start-Studio.ps1` from PowerShell in this folder.
@@ -9,7 +11,7 @@ A working Phase 1 editorial application built in `C:\Users\it\Documents\2d`: Nex
 3. The administrator password is the `ADMIN_PASSWORD` value in your private `.env` file. Keep that file private. The installer generates random local credentials; there is no default shared password.
 4. Use **Run discovery**, review a story, **Select for video**, then open **Prompt builder**. Edit research, generate the complete prompt, and copy it or download Markdown. Attach your images separately in Claude.
 
-The application has already been installed and built in this folder. Its first live discovery run saved 38 feed articles. The two BBC feeds are enabled; entertainment sources are included but disabled until you confirm their permitted use. All seed provenance groups are `unknown`: popularity alone will not trigger alerts.
+The application has already been installed and built in this folder. Its first live discovery run saved 38 feed articles. Active sources now include BBC India/World, NDTV India/Hindi/Movies, and Hindustan Times India/Entertainment/Telugu Cinema. The newly connected publisher feeds use **headlines-only discovery**: title, publisher, URL and timestamps; article excerpts, footage and images are not retained. Their feed terms remain applicable, including personal/non-commercial restrictions; enabling a connection does not purchase commercial content rights. All seed provenance groups are `unknown`: popularity alone will not trigger alerts.
 
 ## Parameters and persistence
 
@@ -74,6 +76,8 @@ Local hourly schedule (explicit installation; not needed if using Azure):
 ```
 
 The Windows task runs once per hour while this computer can run tasks. It is not a substitute for cloud scheduling. To remove it: `Unregister-ScheduledTask -TaskName DrishtiHourlyDiscovery`.
+
+The hourly Windows task has been installed on this machine as `DrishtiHourlyDiscovery`, and successful scheduled runs have been observed. You do not need to install it again here. Use `Stop-Studio.ps1` to stop the local dashboard/API; that does not disable the separate monitoring task.
 
 Azure uses a native Container Apps Job with cron `0 * * * *`, one replica, a 30-minute timeout, and no permanent polling loop. PostgreSQL advisory locking also prevents overlap with manual runs. A process exit releases the lock; the next owner records abandoned runs as interrupted. Change both the dashboard's interval and the actual external scheduler together. The next-run display is explicitly an estimate, not proof that a scheduler is installed.
 

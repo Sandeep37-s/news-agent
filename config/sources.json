@@ -1,0 +1,120 @@
+[
+  {
+    "name": "BBC News · India",
+    "url": "https://feeds.bbci.co.uk/news/world/asia/india/rss.xml",
+    "kind": "rss",
+    "region": "india",
+    "category": "national",
+    "origin_group": "unknown",
+    "enabled": true,
+    "primary": false,
+    "options": {}
+  },
+  {
+    "name": "BBC News · World",
+    "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "kind": "rss",
+    "region": "global",
+    "category": "world",
+    "origin_group": "unknown",
+    "enabled": true,
+    "primary": false,
+    "options": {}
+  },
+  {
+    "name": "Hindustan Times · Entertainment",
+    "url": "https://www.hindustantimes.com/feeds/rss/entertainment/rssfeed.xml",
+    "kind": "rss",
+    "region": "india",
+    "category": "entertainment",
+    "origin_group": "unknown",
+    "enabled": true,
+    "primary": false,
+    "options": {
+      "headlines_only": true,
+      "purpose": "private headline discovery; original research and editorial approval before production",
+      "terms_url": "https://www.hindustantimes.com/rss",
+      "rights_note": "Public feed access does not grant a commercial content licence. Publisher terms apply; no articles, footage, photographs or audio are licensed by this connection."
+    }
+  },
+  {
+    "name": "Hindustan Times · Telugu Cinema",
+    "url": "https://www.hindustantimes.com/feeds/rss/entertainment/telugu-cinema/rssfeed.xml",
+    "kind": "rss",
+    "region": "india",
+    "category": "entertainment",
+    "origin_group": "unknown",
+    "enabled": true,
+    "primary": false,
+    "options": {
+      "headlines_only": true,
+      "purpose": "private headline discovery; original research and editorial approval before production",
+      "terms_url": "https://www.hindustantimes.com/rss",
+      "rights_note": "Public feed access does not grant a commercial content licence. Publisher terms apply; no articles, footage, photographs or audio are licensed by this connection."
+    }
+  },
+  {
+    "name": "Hindustan Times · India",
+    "url": "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
+    "kind": "rss",
+    "region": "india",
+    "category": "national",
+    "origin_group": "unknown",
+    "enabled": true,
+    "primary": false,
+    "options": {
+      "headlines_only": true,
+      "purpose": "private headline discovery; original research and editorial approval before production",
+      "terms_url": "https://www.hindustantimes.com/rss",
+      "rights_note": "Public feed access does not grant a commercial content licence. Publisher terms apply; no articles, footage, photographs or audio are licensed by this connection."
+    }
+  },
+  {
+    "name": "NDTV · India",
+    "url": "https://feeds.feedburner.com/ndtvnews-india-news",
+    "kind": "rss",
+    "region": "india",
+    "category": "national",
+    "origin_group": "unknown",
+    "enabled": true,
+    "primary": false,
+    "options": {
+      "headlines_only": true,
+      "purpose": "private headline discovery; original research and editorial approval before production",
+      "terms_url": "https://www.ndtv.com/rss",
+      "rights_note": "Public feed access does not grant a commercial content licence. Publisher terms apply; no articles, footage, photographs or audio are licensed by this connection."
+    }
+  },
+  {
+    "name": "NDTV · Movies",
+    "url": "https://feeds.feedburner.com/ndtvmovies-latest",
+    "kind": "rss",
+    "region": "india",
+    "category": "entertainment",
+    "origin_group": "unknown",
+    "enabled": true,
+    "primary": false,
+    "options": {
+      "headlines_only": true,
+      "purpose": "private headline discovery; original research and editorial approval before production",
+      "terms_url": "https://www.ndtv.com/rss",
+      "rights_note": "Public feed access does not grant a commercial content licence. Publisher terms apply; no articles, footage, photographs or audio are licensed by this connection."
+    }
+  },
+  {
+    "name": "NDTV · Hindi",
+    "url": "https://feeds.feedburner.com/ndtvkhabar-latest",
+    "kind": "rss",
+    "region": "india",
+    "category": "national",
+    "origin_group": "unknown",
+    "enabled": true,
+    "primary": false,
+    "options": {
+      "headlines_only": true,
+      "purpose": "private headline discovery; original research and editorial approval before production",
+      "terms_url": "https://www.ndtv.com/rss",
+      "rights_note": "Public feed access does not grant a commercial content licence. Publisher terms apply; no articles, footage, photographs or audio are licensed by this connection."
+    }
+  }
+]
