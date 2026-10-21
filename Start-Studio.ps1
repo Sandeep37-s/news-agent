@@ -6,18 +6,42 @@ if ((Get-NetTCPConnection -LocalPort 3000,8000 -State Listen -ErrorAction Silent
 }
 $studioPython = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $studioPython)) { throw 'Run the setup steps in README.md first.' }
+$nodePath = (Get-Command node.exe -ErrorAction Stop).Source
+$nextPath = Join-Path $PSScriptRoot 'frontend\node_modules\next\dist\bin\next'
+if (-not (Test-Path -LiteralPath $nextPath) -or -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'frontend\.next\BUILD_ID'))) {
+    throw 'Install frontend dependencies and run the production build described in README.md first.'
+}
 & $studioPython scripts/setup.py
+if ($LASTEXITCODE -ne 0) { throw 'Local environment setup failed.' }
 & $studioPython -m alembic upgrade head
 if ($LASTEXITCODE -ne 0) { throw 'Database migration failed.' }
 & $studioPython -m backend.bootstrap
 if ($LASTEXITCODE -ne 0) { throw 'Database initialization failed.' }
 New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot 'data') | Out-Null
+try {
 $apiProcess = Start-Process -FilePath $studioPython -ArgumentList @('-m','uvicorn','backend.api:app','--host','127.0.0.1','--port','8000','--no-access-log') -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $PSScriptRoot 'data\api.log') -RedirectStandardError (Join-Path $PSScriptRoot 'data\api-error.log') -PassThru
-$nodePath = (Get-Command node.exe).Source
-$nextEntry = '"' + (Join-Path $PSScriptRoot 'frontend\node_modules\next\dist\bin\next') + '"'
+@{api=$apiProcess.Id;web=0} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'data\local-processes.json')
+$nextEntry = '"' + $nextPath + '"'
 $webProcess = Start-Process -FilePath $nodePath -ArgumentList @($nextEntry,'start','--hostname','127.0.0.1') -WorkingDirectory (Join-Path $PSScriptRoot 'frontend') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $PSScriptRoot 'data\web.log') -RedirectStandardError (Join-Path $PSScriptRoot 'data\web-error.log') -PassThru
 @{api=$apiProcess.Id;web=$webProcess.Id} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'data\local-processes.json')
-Write-Host 'Studio starting at http://localhost:3000'
+$studioDeadline = (Get-Date).AddSeconds(30)
+$studioReady = $false
+while ((Get-Date) -lt $studioDeadline) {
+    try {
+        $studioHealth = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2
+        $studioPage = Invoke-WebRequest -Uri 'http://127.0.0.1:3000' -TimeoutSec 2 -UseBasicParsing
+        if ($studioHealth.status -eq 'ok' -and $studioPage.StatusCode -eq 200) { $studioReady = $true; break }
+    } catch { }
+    Start-Sleep -Milliseconds 300
+}
+if (-not $studioReady) {
+    throw 'Studio startup failed. Check data\api-error.log and data\web-error.log; install dependencies and build the frontend if needed.'
+}
+} catch {
+    & (Join-Path $PSScriptRoot 'Stop-Studio.ps1')
+    throw
+}
+Write-Host 'Studio is ready at http://localhost:3000'
 Write-Host "Owned process IDs: API $($apiProcess.Id), web $($webProcess.Id)."
 Write-Host 'Your administrator password is the ADMIN_PASSWORD value in the private .env file.'
 Write-Host 'Hourly monitoring is separate. See README.md to install the local schedule or deploy Azure Jobs.'

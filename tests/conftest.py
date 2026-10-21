@@ -20,6 +20,9 @@ def pytest_sessionfinish(session,exitstatus):
 @pytest.fixture(autouse=True)
 def database():
     Base.metadata.drop_all(engine)
+    from sqlalchemy import text
+    with engine.begin() as connection:
+        connection.execute(text('DROP TABLE IF EXISTS alembic_version'))
     Base.metadata.create_all(engine)
     bootstrap()
     yield

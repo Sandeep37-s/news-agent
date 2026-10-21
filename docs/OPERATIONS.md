@@ -5,6 +5,7 @@
 - Dashboard **Overview**: latest run status, counts, estimated next run, Telegram configuration.
 - **Activity**: individual source outcomes and delivery status. Empty feeds are not called success.
 - `data/api-error.log`, `data/web-error.log`: local process errors. The launcher avoids API access logs.
+- The launcher verifies database/schema readiness and an HTTP response from the dashboard before reporting success. A failed start stops the processes it recorded and points to the logs.
 - Worker stdout: JSON with run ID, status, new story count and article count.
 - `audit` table: source/provider error classes, settings history, editorial decisions, prompt generation and AI usage. URLs/tokens from exception strings are not logged.
 
@@ -25,11 +26,17 @@ Run status `success` means configured sources returned usable feed items; it doe
 
 ## Backup and recovery
 
+Unsaved story edits are protected in this tab's session storage when available. Return to the story in the same tab to recover them. Use **Save edits** or generate prompts for server storage; another computer cannot read this tab's draft. Closing the tab or clearing browser data can remove it. Storage failures are shown honestly. **Discard draft and restore saved fields** replaces the draft with the last saved server fields.
+
+If the session expires, sign in again to recover the current story link and available draft. Passwords are never draft fields.
+
 For SQLite, stop application/worker writes and copy `data/studio.db` to a protected backup location. Also back up the private environment separately with restricted access. For production use managed PostgreSQL backups, point-in-time recovery and regular restore drills. Do not share a live SQLite file between separate Azure replicas.
 
 Use Alembic for schema changes. Test upgrades on a restored copy before production. `001` has a downgrade for test use; downgrading drops data and should not be used as a production rollback plan. Restore from backup instead.
 
 Prompt records retain the generated text and Channel Bible version, so later configuration changes do not alter historical prompts. Audits retain prior versions. Rejected/archived stories remain stored; no automatic retention deletion is enabled. Plan appropriate backup/log retention and capacity monitoring as volume grows.
+
+`/health` returns 503 when the database cannot be reached, the Alembic revision is outdated, or required settings are missing. Run migrations and bootstrap before considering a new instance ready. This endpoint does not certify source freshness or news accuracy.
 
 ## Security boundaries
 

@@ -39,7 +39,10 @@ def fetch_bytes(url, headers=None):
                     with client.stream('GET', current, headers={'User-Agent':'HindiNewsStudio/1.0 (RSS reader)', **(headers or {})}) as response:
                         if response.is_redirect:
                             target=urljoin(current,response.headers['location'])
-                            if urlsplit(target).netloc != urlsplit(current).netloc:
+                            old_origin,new_origin=urlsplit(current),urlsplit(target)
+                            if old_origin.scheme=='https' and new_origin.scheme!='https':
+                                raise ValueError('HTTPS source redirects must remain HTTPS')
+                            if (new_origin.scheme,new_origin.netloc)!=(old_origin.scheme,old_origin.netloc):
                                 headers = None
                             current=target
                             continue
@@ -66,7 +69,7 @@ def parsed_date(value):
                 return None
             return dt.astimezone(timezone.utc).isoformat()
         return datetime(*value[:6], tzinfo=timezone.utc).isoformat()
-    except (TypeError,ValueError):
+    except (TypeError,ValueError,OverflowError):
         return None
 
 def parse_feed(content):
@@ -106,6 +109,8 @@ class JSONAdapter:
         mapping=options.get('fields',{})
         result=[]
         for row in rows[:100]:
+            if not isinstance(row,dict):
+                continue
             try:
                 result.append({'title':clean(row.get(mapping.get('title','title')),300),'summary':clean(row.get(mapping.get('summary','description')),500),'url':canonical(row.get(mapping.get('url','url'),'')),'published_at':parsed_date(row.get(mapping.get('published_at','publishedAt'))),'event_at':parsed_date(row.get(mapping.get('event_at','eventAt')))})
             except ValueError:

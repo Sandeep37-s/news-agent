@@ -13,8 +13,9 @@
 - `pending`: scheduled for retry, waiting for credentials, or waiting for the next hourly run.
 - `sent`: Telegram acknowledged the message.
 - `failed`: permanent API rejection or maximum attempts reached. Check revoked token, wrong ID, permissions or a blocked bot.
-- `uncertain`: timeout, connection loss, or restart during sending. Inspect Telegram first. Queue a retry only if necessary; Telegram may already have delivered it.
-- `suppressed`: recipient no longer authorized or story rejected/archived/dismissed.
+- `uncertain`: timeout, connection loss, unreadable success response, or restart during sending. Inspect Telegram first. Queue a retry only if necessary; Telegram may already have delivered it.
+- `suppressed`: recipient no longer authorized, story rejected/archived/dismissed, or story no longer meeting current eligibility, score or category rules. Queued alerts are checked again at delivery time.
 - Rate limits: `retry_after` is respected as a minimum; the next hourly run may deliver later.
+- Unusually long API-requested waits (over 24 hours) stop automatic retries and require checking the bot status. The worker does not shorten that wait and resend early.
 
 The [official Telegram Bot API](https://core.telegram.org/bots/api#sendmessage) defines message delivery fields. The application sends plain text with source URLs, without interpreting article markup.

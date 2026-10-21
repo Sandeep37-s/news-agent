@@ -9,7 +9,7 @@ A working Phase 1 editorial application built in `C:\Users\it\Documents\2d`: Nex
 1. Run `Start-Studio.ps1` from PowerShell in this folder.
 2. Open **http://localhost:3000**.
 3. The administrator password is the `ADMIN_PASSWORD` value in your private `.env` file. Keep that file private. The installer generates random local credentials; there is no default shared password.
-4. Use **Run discovery**, review a story, **Select for video**, then open **Prompt builder**. Edit research, generate the complete prompt, and copy it or download Markdown. Attach your images separately in Claude.
+4. Use **Run discovery**, review a story, **Select for video**, then open **Prompt builder**. Set episode preferences and edit research, then generate both prompts and copy or download either/both. Saved versions and same-tab draft recovery are available. Attach your images separately in Claude.
 
 The application has already been installed and built in this folder. Its first live discovery run saved 38 feed articles. Active sources now include BBC India/World, NDTV India/Hindi/Movies, and Hindustan Times India/Entertainment/Telugu Cinema. The newly connected publisher feeds use **headlines-only discovery**: title, publisher, URL and timestamps; article excerpts, footage and images are not retained. Their feed terms remain applicable, including personal/non-commercial restrictions; enabling a connection does not purchase commercial content rights. All seed provenance groups are `unknown`: popularity alone will not trigger alerts.
 
@@ -22,6 +22,7 @@ The application has already been installed and built in this folder. Its first l
 | `config/sources.json` | Initial source definitions |
 | `config/channel_bible.md` | Initial permanent channel rules |
 | `config/video_prompt_template.md` | Reusable production template |
+| `config/reference_picture_prompt_template.md` | Story-specific reference-picture template |
 | `data/studio.db` | Local SQLite database, live settings, stories, research, decisions, prompts, runs, notifications, audit history |
 | Dashboard → Settings | Edit persisted monitoring settings, sources, Channel Bible, and prompt template |
 | `infra/parameters.example.json` | Azure deployment parameter template, no secrets |
@@ -89,7 +90,7 @@ Azure uses a native Container Apps Job with cron `0 * * * *`, one replica, a 30-
 - Headline overlap and numeric checks cluster related English/Hindi reports conservatively. This is a transparent first-version heuristic, not cross-language semantic equivalence. It can miss paraphrases or misclassify stories; human review remains necessary. Geographic and importance signals are likewise heuristic.
 - Facts are not automatically marked confirmed. Research separates attributed claims, confirmed facts, conflicts, unknowns and analysis. An empty conflict list means none recorded, not proof of agreement. The editor can save a research review without losing original source records.
 - Entertainment supports upcoming releases, box-office updates, record claims, celebrity/industry developments, and regional cinema. Gossip-pattern stories are ineligible for alerts.
-- Box-office extraction records separate candidate figures, currency where explicit, territory, measure, reporting period, source, report timestamp and uncertainty. Missing values remain unknown. Conflicting figures are preserved separately; no definitive total is invented. Record headlines remain unverified until comparison category, period and evidence are established. Review extracted amounts before use—automatic extraction can include a budget or another number.
+- Box-office extraction records separate candidate figures, currency where explicit, territory, measure, reporting period, source, report timestamp and uncertainty. Missing values remain unknown. Conflicting figures are preserved separately; no definitive total is invented. Record headlines remain unverified until comparison category, period and evidence are established. Review extracted amounts before use—ambiguous budget, fee and audience-count contexts are skipped and may require manual research.
 
 ## Optional AI research and Hindi summaries
 
@@ -110,6 +111,8 @@ Each story/chat pair gets at most one automatic alert. HTTP 429 and server failu
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 Set-Location frontend
+npm.cmd test
+npm.cmd run typecheck
 npm.cmd run build
 ```
 

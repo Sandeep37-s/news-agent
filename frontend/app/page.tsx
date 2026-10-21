@@ -1,21 +1,12 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
+import {api,StudioApiError,blank,textFields,formLimits,saveDraft,recoverDraft,discardDraft} from '../lib/studio';
+import type {Form} from '../lib/studio';
 
 type Article={id:string;title:string;publisher:string;url:string;published_at:string|null;event_at:string|null;retrieved_at:string;origin_group:string};
 type Story={id:string;title:string;region:string;category:string;subcategory:string;status:string;score:number;updated_at:string;research:Record<string,any>;scoring:Record<string,any>;articles?:Article[]};
-type Form={summary:string;sources:string;confirmed_facts:string;uncertainties:string;angle:string;additional_instructions:string;image_instructions:string;target_duration_seconds:number;story_format:'auto'|'explainer'|'timeline'|'news_update';animation_style:'hybrid'|'motion_graphics'|'anchor_led';anchor_presence:'balanced'|'minimal'|'frequent'};
 type PromptSummary={id:string;created_at:string;channel_version:number;has_picture:boolean};
-const textFields=['summary','sources','confirmed_facts','uncertainties','angle','additional_instructions','image_instructions'] as const;
-const blank:Form={summary:'',sources:'',confirmed_facts:'',uncertainties:'',angle:'',additional_instructions:'',image_instructions:'I will attach story images separately. Ask for missing permanent references.',target_duration_seconds:240,story_format:'auto',animation_style:'hybrid',anchor_presence:'balanced'};
 const label=(s:string)=>s.replaceAll('_',' ');
-
-async function api(path:string,method='GET',body?:unknown){
-  const response=await fetch('/api'+path,{method,headers:{'Content-Type':'application/json','X-Studio-Action':'1'},...(body===undefined?{}:{body:JSON.stringify(body)})});
-  const raw=await response.text();
-  let data;try{data=JSON.parse(raw);}catch{throw new Error('The studio could not reach its backend. Check that it is running, then retry.');}
-  if(!response.ok) throw new Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail||'Request failed'));
-  return data;
-}
 
 export default function Studio(){
   const [signed,setSigned]=useState(false),[checking,setChecking]=useState(true),[password,setPassword]=useState('');
@@ -24,8 +15,10 @@ export default function Studio(){
   const [form,setForm]=useState<Form>(blank),[prompt,setPrompt]=useState<any>(null),[settings,setSettings]=useState<any>(null),[settingsText,setSettingsText]=useState('');
   const [sources,setSources]=useState<any[]>([]),[sourceEdit,setSourceEdit]=useState(''),[sourceId,setSourceId]=useState(''),[runs,setRuns]=useState<any[]>([]),[notes,setNotes]=useState<any[]>([]);
   const previewRef=useRef<HTMLElement>(null);
-  const storyRequest=useRef(0),listRequest=useRef(0);
+  const storyRequest=useRef(0),listRequest=useRef(0),pendingActions=useRef(0);
+  const [draftState,setDraftState]=useState<'none'|'saved'|'memory_only'>('none');
   const [history,setHistory]=useState<PromptSummary[]>([]);
+  const [recentStories,setRecentStories]=useState<Story[]>([]);
   const [copyStatus,setCopyStatus]=useState<{kind:string;message:string}|null>(null);
   const [promptTab,setPromptTab]=useState<'news_story'|'reference_picture'>('news_story');
   const [connections,setConnections]=useState<{prompt_builder:boolean;telegram:boolean;ai_research:boolean}|null>(null);
@@ -34,13 +27,31 @@ export default function Studio(){
 
   async function refresh(){const [o,ss,c]=await Promise.all([api('/overview'),api('/settings'),api('/connections')]);setOverview(o);setSettings(ss);setConnections(c);setSettingsText(JSON.stringify(ss.monitoring.value,null,2));}
   async function loadStories(){const params=new URLSearchParams({q:query,category:view==='Entertainment'?'entertainment':category,region:view==='Global alerts'?'global':view==='Indian news'||view==='Entertainment'?'india':'',subcategory:sub,status});const request=++listRequest.current;const rows=await api('/stories?'+params);if(request===listRequest.current)setStories(rows);}
-  async function act(work:()=>Promise<void>){setBusy(true);setError('');setNotice('');try{await work();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  function handleError(e:unknown){
+    if(e instanceof StudioApiError&&e.status===401&&signed){setSigned(false);setError('Your session expired. Sign in again; any available draft will be restored.');}
+    else setError(e instanceof Error?e.message:'An unexpected error occurred. Please try again.');
+  }
+  async function act(work:()=>Promise<void>){pendingActions.current++;setBusy(true);setError('');setNotice('');try{await work();}catch(e){handleError(e);}finally{pendingActions.current--;setBusy(pendingActions.current>0);}}
+  function editForm(change:Partial<Form>){
+    if(!story)return;
+    const next={...form,...change};setForm(next);setPrompt(null);
+    let stored=false;try{stored=saveDraft(sessionStorage,story.id,next);}catch{}
+    setDraftState(stored?'saved':'memory_only');
+  }
+  function clearLocalDraft(id:string){try{discardDraft(sessionStorage,id);}catch{}setDraftState('none');}
+  async function initializeSession(){
+    await refresh();setSigned(true);
+    const id=new URLSearchParams(location.search).get('story');if(id)await openStory(id);
+  }
   async function openStory(id:string){
     const request=++storyRequest.current;
     const [s,f,h]=await Promise.all([api('/stories/'+id),api('/stories/'+id+'/prompt-form'),api('/stories/'+id+'/prompts')]);
     const latest=h.length?await api('/prompts/'+h[0].id):null;
     if(request!==storyRequest.current)return;
-    setStory(s);setForm({...blank,...f});setHistory(h);setPrompt(latest);
+    let draft:Form|null=null;try{draft=recoverDraft(sessionStorage,id);}catch{}
+    setRecentStories(previous=>[s,...previous.filter(item=>item.id!==s.id)].slice(0,10));
+    setStory(s);setForm(draft||{...blank,...f});setDraftState(draft?'saved':'none');setHistory(h);setPrompt(draft?null:latest);
+    const url=new URL(location.href);url.searchParams.set('story',id);window.history.replaceState(null,'',url);
   }
   useEffect(()=>{setCopyStatus(null);setPromptTab('news_story');if(prompt)previewRef.current?.scrollIntoView({behavior:'smooth',block:'start'});},[prompt]);
   async function generatePrompt(){
@@ -52,6 +63,7 @@ export default function Studio(){
     }
     const generated=await api('/stories/'+story.id+'/prompt','POST',currentForm);
     setPrompt(generated);
+    clearLocalDraft(story.id);
     setHistory(await api('/stories/'+story.id+'/prompts'));
     setNotice('Your news-story and reference-picture prompts are ready. Copy either one or both into Claude.');
   }
@@ -68,46 +80,48 @@ export default function Studio(){
       throw new Error('Clipboard access failed. Use the Markdown download.');
     }
   }
-  useEffect(()=>{api('/overview').then(async o=>{setSigned(true);setOverview(o);await refresh();const id=new URLSearchParams(location.search).get('story');if(id)await openStory(id);}).catch(()=>{}).finally(()=>setChecking(false));},[]);
-  useEffect(()=>{if(!signed)return;let canceled=false;const timer=setTimeout(()=>{loadStories().catch(e=>{if(!canceled)setError(e.message)});},200);return()=>{canceled=true;++listRequest.current;clearTimeout(timer)};},[signed,view,query,category,sub,status]);
+  useEffect(()=>{initializeSession().catch(e=>{if(!(e instanceof StudioApiError&&e.status===401))handleError(e);}).finally(()=>setChecking(false));},[]);
+  useEffect(()=>{if(!signed)return;let canceled=false;const timer=setTimeout(()=>{loadStories().catch(e=>{if(!canceled)handleError(e)});},200);return()=>{canceled=true;++listRequest.current;clearTimeout(timer)};},[signed,view,query,category,sub,status]);
   useEffect(()=>{if(!signed)return;act(async()=>{if(view==='Settings')setSources(await api('/sources'));if(view==='Activity'){const [r,n]=await Promise.all([api('/runs'),api('/notifications')]);setRuns(r);setNotes(n);}});},[view,signed]);
 
   if(checking)return <main className="login"><div className="brand">दृष्टि <span>DRISHTI</span></div><p>Opening your editorial desk…</p></main>;
-  if(!signed)return <main className="login"><div className="login-card"><div className="brand">दृष्टि <span>DRISHTI</span></div><p className="eyebrow">HINDI NEWS DISCOVERY STUDIO</p><h1>A clearer view.<br/>A stronger story.</h1><p>Research Indian news, follow cinema, and prepare your next Hindi documentary.</p><form onSubmit={e=>{e.preventDefault();act(async()=>{await api('/login','POST',{password});setPassword('');await refresh();setSigned(true);});}}><label>Administrator password<input type="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="primary" disabled={busy}>Open the studio →</button></form>{error&&<p role="alert" className="error">{error}</p>}<small>Private editorial workspace · Human approval at every stage</small></div></main>;
+  if(!signed)return <main className="login"><div className="login-card"><div className="brand">दृष्टि <span>DRISHTI</span></div><p className="eyebrow">HINDI NEWS DISCOVERY STUDIO</p><h1>A clearer view.<br/>A stronger story.</h1><p>Research Indian news, follow cinema, and prepare your next Hindi documentary.</p><form onSubmit={e=>{e.preventDefault();act(async()=>{await api('/login','POST',{password});setPassword('');await initializeSession();});}}><label>Administrator password<input type="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="primary" disabled={busy}>Open the studio →</button></form>{error&&<p role="alert" className="error">{error}</p>}<small>Private editorial workspace · Human approval at every stage</small></div></main>;
 
+  const promptStories=Array.from(new Map([...(story?[story]:[]),...recentStories,...stories].map(item=>[item.id,item])).values());
   const navigate=(v:string)=>{setView(v);setCategory('');setSub('');setStatus('');setQuery('');};
   const select=async(value:string)=>{if(!story)return;await api('/stories/'+story.id+'/decision','PATCH',{status:value});setStory({...story,status:value});await loadStories();setNotice('Editorial decision saved. Your current form edits are retained.');};
   return <div className="shell">
-    <aside className="sidebar"><div className="brand">दृष्टि <span>DRISHTI</span></div><p className="sidebar-caption">THE EDITORIAL DESK</p><nav>{['Overview','Indian news','Entertainment','Global alerts','Prompt builder','Activity','Settings'].map((v,i)=><button key={v} className={view===v?'nav active':'nav'} onClick={()=>navigate(v)}><span>{['◫','◉','✦','◎','▤','↻','⚙'][i]}</span>{v}</button>)}</nav><div className="sidebar-bottom"><span className="live-dot"/> Phase 1 · Discovery<br/><small>Research. Review. Create with intent.</small><button className="text-button" onClick={()=>act(async()=>{await api('/logout','POST');setSigned(false);})}>Sign out ↗</button></div></aside>
+    <aside className="sidebar"><div className="brand">दृष्टि <span>DRISHTI</span></div><p className="sidebar-caption">THE EDITORIAL DESK</p><nav>{['Overview','Indian news','Entertainment','Global alerts','Prompt builder','Activity','Settings'].map((v,i)=><button key={v} disabled={busy} className={view===v?'nav active':'nav'} onClick={()=>navigate(v)}><span>{['◫','◉','✦','◎','▤','↻','⚙'][i]}</span>{v}</button>)}</nav><div className="sidebar-bottom"><span className="live-dot"/> Phase 1 · Discovery<br/><small>Research. Review. Create with intent.</small><button className="text-button" onClick={()=>act(async()=>{await api('/logout','POST');setSigned(false);})}>Sign out ↗</button></div></aside>
     <main className="workspace"><header><div className="breadcrumb">WORKSPACE <span>/</span> {view.toUpperCase()}</div><div className="header-meta">Hindi channel <span className="avatar">हि</span></div></header>
       <section className="page-heading"><div><p className="eyebrow">EVIDENCE BEFORE THE EDIT</p><h1>{view==='Overview'?'Your next story starts here.':view}</h1><p>{view==='Overview'?'A considered view of India, cinema, and the developments that matter.':view==='Global alerts'?'Information alerts only. You decide what deserves further research.':view==='Prompt builder'?'Prepare the news-story and reference-picture prompts. Your Claude agent makes the video.':'Your research, source evidence, and editorial decisions in one place.'}</p></div><button className="primary" disabled={busy} onClick={()=>act(async()=>{const r=await api('/run','POST');await refresh();await loadStories();setNotice('Monitoring finished: '+r.status+'. '+r.new_stories+' new stories.');})}>{busy?'Working…':'↻ Run discovery'}</button></section>
       <div aria-live="polite">{notice&&<div className="notice">{notice}</div>}{error&&<div role="alert" className="error">{error}</div>}</div>
       {view==='Overview'&&<><div className="stats">{[['Indian candidates',overview?.counts.india||0,'Stories for your review'],['Entertainment',overview?.counts.entertainment||0,'Cinema & the industry'],['Global alerts',overview?.counts.global||0,'Awaiting your direction'],['Last run',overview?.last_run?.status||'Not run',date(overview?.last_run?.finished_at)]].map(([title,value,caption])=><div className="stat" key={title}><small>{title}</small><strong>{value}</strong><span>{caption}</span></div>)}</div><div className="overview-grid"><div className="editorial-banner"><p className="eyebrow">THE HUMAN STAYS IN THE LOOP</p><h2>From a developing story<br/>to an informed perspective.</h2><p>Explore the evidence, select a story, and build a complete production brief. Every decision remains yours.</p><button onClick={()=>navigate('Indian news')}>Explore Indian news ↗</button><div className="orb" aria-hidden="true">दृष्टि</div></div><div className="panel schedule"><div className="panel-title"><h3>Discovery pulse</h3><span className="tag">{settings?.monitoring.value.interval_minutes||60} min</span></div><p>Next run estimate</p><strong>{date(overview?.next_run_estimate)}</strong><small>{overview?.schedule_note}</small><hr/><p>Telegram</p><strong>{overview?.telegram_configured?'Configured':'Setup required'}</strong><small>{Object.entries(overview?.notifications||{}).map(([k,v])=>`${v} ${k}`).join(' · ')||'No notifications queued'}</small></div></div><div className="section-title"><h2>On the editorial radar</h2><span>Ranked by transparent signals</span></div></>}
-      {['Overview','Indian news','Entertainment','Global alerts'].includes(view)&&<><div className="filters"><input aria-label="Search headlines" placeholder="Search stories, films, developments…" value={query} onChange={e=>setQuery(e.target.value)}/>{view!=='Entertainment'&&<select aria-label="Category" value={category} onChange={e=>setCategory(e.target.value)}><option value="">All categories</option>{(settings?.monitoring.value.categories||[]).map((c:string)=><option key={c}>{c}</option>)}</select>}{view==='Entertainment'&&<select aria-label="Entertainment topic" value={sub} onChange={e=>setSub(e.target.value)}><option value="">All entertainment</option>{['upcoming_releases','box_office','record_breaking','celebrity_industry','regional_cinema'].map(s=><option value={s} key={s}>{label(s)}</option>)}</select>}<select aria-label="Editorial status" value={status} onChange={e=>setStatus(e.target.value)}><option value="">All statuses</option>{['new','awaiting_direction','interested','selected','research_requested','rejected','dismissed','archived'].map(s=><option value={s} key={s}>{label(s)}</option>)}</select></div><div className="story-grid">{stories.map(s=><button className="story-card" key={s.id} onClick={()=>act(()=>openStory(s.id))}><div className="card-top"><span className={'category '+(s.category==='entertainment'?'purple':'')}>{s.region==='global'?'GLOBAL ALERT':s.category.toUpperCase()}</span><span className="score">{s.score}<small> / 100</small></span></div><h3>{s.title}</h3><p>{s.research.summary}</p><div className="card-evidence">{s.scoring.publisher_count||1} publishers · {s.scoring.independent_origins||0} reviewed origins</div><div className="card-bottom"><span className="tag">{label(s.status)}</span><span>Review evidence ↗</span></div></button>)}</div>{stories.length===0&&<div className="empty"><span>◎</span><h2>No stories in this view yet.</h2><p>Run discovery or adjust your filters. Real source results will appear here.</p></div>}{stories.length===100&&<p>Showing the top 100 results. Narrow your search to find older stories.</p>}</>}
+      {['Overview','Indian news','Entertainment','Global alerts'].includes(view)&&<><div className="filters"><input aria-label="Search headlines" placeholder="Search stories, films, developments…" value={query} onChange={e=>setQuery(e.target.value)}/>{view!=='Entertainment'&&<select aria-label="Category" value={category} onChange={e=>setCategory(e.target.value)}><option value="">All categories</option>{(settings?.monitoring.value.categories||[]).map((c:string)=><option key={c}>{c}</option>)}</select>}{view==='Entertainment'&&<select aria-label="Entertainment topic" value={sub} onChange={e=>setSub(e.target.value)}><option value="">All entertainment</option>{['upcoming_releases','box_office','record_breaking','celebrity_industry','regional_cinema'].map(s=><option value={s} key={s}>{label(s)}</option>)}</select>}<select aria-label="Editorial status" value={status} onChange={e=>setStatus(e.target.value)}><option value="">All statuses</option>{['new','awaiting_direction','interested','selected','research_requested','rejected','dismissed','archived'].map(s=><option value={s} key={s}>{label(s)}</option>)}</select></div><div className="story-grid">{stories.map(s=><button className="story-card" disabled={busy} key={s.id} onClick={()=>act(()=>openStory(s.id))}><div className="card-top"><span className={'category '+(s.category==='entertainment'?'purple':'')}>{s.region==='global'?'GLOBAL ALERT':s.category.toUpperCase()}</span><span className="score">{s.score}<small> / 100</small></span></div><h3>{s.title}</h3><p>{s.research.summary}</p><div className="card-evidence">{s.scoring.publisher_count||1} publishers · {s.scoring.independent_origins||0} reviewed origins</div><div className="card-bottom"><span className="tag">{label(s.status)}</span><span>Review evidence ↗</span></div></button>)}</div>{stories.length===0&&<div className="empty"><span>◎</span><h2>No stories in this view yet.</h2><p>Run discovery or adjust your filters. Real source results will appear here.</p></div>}{stories.length===100&&<p>Showing the top 100 results. Narrow your search to find older stories.</p>}</>}
       {view==='Prompt builder'&&<div className="builder">
         <section className="panel">
           <h2>01 / Choose your story</h2>
           <p>Get two text prompts: the news story and its reference picture. Give them to your Claude video agent. No API token is needed to prepare these prompts.</p>
-          <select aria-label="Choose story for prompt" value={story?.id||''} disabled={busy} onChange={e=>{if(e.target.value)act(()=>openStory(e.target.value));else{++storyRequest.current;setStory(null);setPrompt(null);setHistory([]);}}}>
-            <option value="">Select a story…</option>{story&&!stories.some(s=>s.id===story.id)&&<option value={story.id}>{story.title}</option>}{stories.map(s=><option value={s.id} key={s.id}>{s.title}</option>)}
+          <select aria-label="Choose story for prompt" value={story?.id||''} disabled={busy} onChange={e=>{if(e.target.value)act(()=>openStory(e.target.value));else{++storyRequest.current;setStory(null);setPrompt(null);setHistory([]);setDraftState('none');}}}>
+            <option value="">Select a story…</option>{promptStories.map(s=><option value={s.id} key={s.id}>{s.title}</option>)}
           </select>
           {story&&<>
             <h3>{story.title}</h3>
             <p className="muted">{label(story.status)} · You choose the story. Claude handles the video.</p>
             {story.status!=='selected'&&<p className="notice">Review the fields below. The final button selects this story and prepares both prompts.</p>}
             <h2>02 / Edit the story and picture direction</h2>
+            {draftState!=='none'&&<div className="draft-notice" role="status"><strong>{draftState==='saved'?'Unsaved draft protected in this browser tab':'Unsaved changes — browser draft storage unavailable'}</strong><p>{draftState==='saved'?'Your edits can be recovered after a refresh or when you return to this story in this tab. Use Save edits or generate prompts to save them to the studio.':'Keep this tab open and use Save edits to keep these changes in the studio.'}</p><button disabled={busy} onClick={()=>act(async()=>{const saved=await api('/stories/'+story.id+'/prompt-form');clearLocalDraft(story.id);setForm({...blank,...saved});setPrompt(null);setNotice('Restored the last saved story fields.');})}>Discard draft and restore saved fields</button></div>}
             <fieldset className="production-options" disabled={busy}>
               <legend>Video direction for Claude</legend>
               <p>These choices guide the prompts. Rendering tools and approved reference images are checked separately in Claude.</p>
               <div className="option-grid">
-                <label>Target length<select value={form.target_duration_seconds} onChange={e=>{setForm({...form,target_duration_seconds:Number(e.target.value)});setPrompt(null);}}>{[60,90,120,180,240,300].map(n=><option key={n} value={n}>{n/60} minutes</option>)}</select></label>
-                <label>Story structure<select value={form.story_format} onChange={e=>{setForm({...form,story_format:e.target.value as Form['story_format']});setPrompt(null);}}><option value="auto">Choose for this story</option><option value="explainer">Background and explanation</option><option value="timeline">Chronological timeline</option><option value="news_update">Latest news update</option></select></label>
-                <label>2D animation style<select value={form.animation_style} onChange={e=>{setForm({...form,animation_style:e.target.value as Form['animation_style']});setPrompt(null);}}><option value="hybrid">Layered 2D + motion graphics</option><option value="motion_graphics">Maps, charts and motion graphics</option><option value="anchor_led">Anchor-led with story cutaways</option></select></label>
-                <label>Anchor screen time<select value={form.anchor_presence} onChange={e=>{setForm({...form,anchor_presence:e.target.value as Form['anchor_presence']});setPrompt(null);}}><option value="balanced">Balanced — intro, explanation, close</option><option value="minimal">Minimal — brief intro and close</option><option value="frequent">Frequent — between story sections</option></select></label>
+                <label>Target length<select value={form.target_duration_seconds} onChange={e=>{editForm({target_duration_seconds:Number(e.target.value)});}}>{Array.from(new Set([60,90,120,180,240,300,form.target_duration_seconds])).sort((a,b)=>a-b).map(n=><option key={n} value={n}>{n/60} minutes</option>)}</select></label>
+                <label>Story structure<select value={form.story_format} onChange={e=>{editForm({story_format:e.target.value as Form['story_format']});}}><option value="auto">Choose for this story</option><option value="explainer">Background and explanation</option><option value="timeline">Chronological timeline</option><option value="news_update">Latest news update</option></select></label>
+                <label>2D animation style<select value={form.animation_style} onChange={e=>{editForm({animation_style:e.target.value as Form['animation_style']});}}><option value="hybrid">Layered 2D + motion graphics</option><option value="motion_graphics">Maps, charts and motion graphics</option><option value="anchor_led">Anchor-led with story cutaways</option></select></label>
+                <label>Anchor screen time<select value={form.anchor_presence} onChange={e=>{editForm({anchor_presence:e.target.value as Form['anchor_presence']});}}><option value="balanced">Balanced — intro, explanation, close</option><option value="minimal">Minimal — brief intro and close</option><option value="frequent">Frequent — between story sections</option></select></label>
               </div>
             </fieldset>
-            {textFields.map(key=><label key={key}>{key==='image_instructions'?'Reference-picture direction':label(key)}<textarea disabled={busy} rows={key==='summary'||key==='sources'?5:3} value={form[key]} onChange={e=>{setForm({...form,[key]:e.target.value});setPrompt(null);}}/></label>)}
-            <button disabled={busy} onClick={()=>act(async()=>{await api('/stories/'+story.id+'/research','PUT',form);setNotice('Your story and picture direction are saved.');})}>Save edits</button>
+            {textFields.map(key=><label key={key}>{key==='image_instructions'?'Reference-picture direction':label(key)}<textarea disabled={busy} maxLength={formLimits[key]} rows={key==='summary'||key==='sources'?5:3} value={form[key]} onChange={e=>{editForm({[key]:e.target.value});}}/></label>)}
+            <button disabled={busy} onClick={()=>act(async()=>{await api('/stories/'+story.id+'/research','PUT',form);clearLocalDraft(story.id);setNotice('Your story and picture direction are saved.');})}>Save edits</button>
             <details><summary>Permanent channel rules · version {settings?.channel.version}</summary><pre>{settings?.channel.value.markdown}</pre></details>
             <div aria-live="polite">{error&&<p className="error">{error}</p>}</div>
             <button className="primary wide" disabled={busy} onClick={()=>act(generatePrompt)}>{busy?'Preparing both prompts…':story.status==='selected'?'Generate both prompts →':'Select story & generate both prompts →'}</button>

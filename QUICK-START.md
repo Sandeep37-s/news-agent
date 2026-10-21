@@ -9,12 +9,13 @@ Project and saved parameters: **C:\Users\it\Documents\2d**
 5. Open **Prompt builder**, choose the story, and set target length, story structure, animation style and anchor screen time. Edit the story and reference-picture direction. Click **Select story & generate both prompts**. If already selected, click **Generate both prompts**.
 6. Switch between **News-story prompt** and **Reference-picture prompt** to copy or download each. **Copy both prompts** and **Download both** provide the combined handoff to Claude. Attach actual story images and permanent references separately in Claude.
 7. Use **Saved prompts** to reopen an earlier snapshot. Current edits and new channel rules apply only when you generate a new pair. Resolve the research-gap notes with your downstream Claude agent before production.
+8. Unsaved edits are protected in the same browser tab when storage is available. Save edits before closing the tab or moving to another computer. Recently opened stories stay in the prompt selector during your session.
 
 The Windows hourly monitoring task is installed as `DrishtiHourlyDiscovery` and has run successfully. This still requires this computer to be available. Use Azure deployment for monitoring independent of your computer.
 
 Settings and editorial decisions are saved in `data/studio.db`. Initial parameter files are in `config/`. Server secrets stay in `.env`. Full setup, Telegram instructions, Azure deployment, and troubleshooting are in `README.md` and `docs/`.
 
-Verified: 36 automated tests pass, the production dashboard builds, live RSS retrieval works, and browser checks confirm both prompt tabs and clipboard success.
+Verified: 56 backend tests and 6 frontend tests pass, the production dashboard builds, and prior live feed and prompt-copy checks pass. The code review and remaining deployment checks are recorded in `docs/CODE-REVIEW.md` and `docs/VALIDATION.md`.
 
 Connected sources: BBC India/World; NDTV India/Hindi/Movies; Hindustan Times India/Entertainment/Telugu Cinema. NDTV and HT connections collect headlines and links for private discovery, with publisher terms retained in Settings. No API key or paid connection was activated for these RSS feeds. They do not provide a commercial content licence. Important leads still need research before your own original script and approved publishing.
 

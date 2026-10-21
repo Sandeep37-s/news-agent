@@ -13,7 +13,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from sqlalchemy import select, func, text, and_, or_
-from .config import env
+from .config import env, ROOT
 from .db import Session, Story, Article, Source, Run, Notification, Setting, Prompt, Audit, audit, now
 from .sources import canonical, public_url
 from .locking import AlreadyRunning, monitoring_lock
@@ -85,8 +85,21 @@ def logout(response:Response):
 @app.get('/health')
 def health():
     try:
-        with Session() as db: db.execute(text('SELECT 1'))
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        from alembic.runtime.migration import MigrationContext
+        expected=set(ScriptDirectory.from_config(Config(str(ROOT/'alembic.ini'))).get_heads())
+        with Session() as db:
+            db.execute(text('SELECT 1'))
+            actual=set(MigrationContext.configure(db.connection()).get_current_heads())
+            if actual!=expected:
+                raise HTTPException(503,'Database migration required')
+            required={'channel','template','picture_template','monitoring'}
+            if not required.issubset(set(db.scalars(select(Setting.key)))):
+                raise HTTPException(503,'Database initialization required')
         return {'status':'ok'}
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(503,'Database unavailable')
 
@@ -216,7 +229,7 @@ class MonitoringSettings(BaseModel):
     global_threshold: float=Field(default=75,ge=0,le=100)
     max_age_hours: int=Field(default=72,ge=1,le=168)
     min_independent_sources: int=Field(default=2,ge=2,le=10)
-    categories: list[str]
+    categories: list[str] = Field(min_length=1,max_length=50)
     weights: dict[str,float]
     ai_enabled: bool=False
     ai_daily_call_limit: int=Field(default=10,ge=0,le=1000)
@@ -239,6 +252,14 @@ class MonitoringSettings(BaseModel):
         if set(v)!=expected or any(x<0 or x>100 for x in v.values()) or sum(v.values())<=0:
             raise ValueError('Provide all eight nonnegative ranking weights with a positive total')
         return v
+
+    @field_validator('categories')
+    @classmethod
+    def categories_valid(cls,v):
+        values=[item.strip() for item in v]
+        if any(not item or len(item)>50 for item in values) or len(set(values))!=len(values):
+            raise ValueError('Use unique nonempty category names of at most 50 characters')
+        return values
 
 def update_setting(db,key,value):
     s=db.get(Setting,key)
@@ -267,6 +288,7 @@ def update_markdown(key:str,body:Markdown,db=Depends(db_session)):
     return update_setting(db,key,body.model_dump())
 
 class SourceBody(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     name:str=Field(min_length=2,max_length=200)
     url:str=Field(max_length=2000)
     kind:Literal['rss','json']='rss'
@@ -276,6 +298,21 @@ class SourceBody(BaseModel):
     primary:bool=False
     origin_group:str=Field(default='unknown',max_length=100)
     options:dict=Field(default_factory=dict)
+
+    @field_validator('options')
+    @classmethod
+    def options_valid(cls,v):
+        if 'headlines_only' in v and not isinstance(v['headlines_only'],bool):
+            raise ValueError('headlines_only must be true or false')
+        if 'fields' in v and (not isinstance(v['fields'],dict) or any(not isinstance(x,str) or not x or len(x)>100 for x in v['fields'].values())):
+            raise ValueError('fields must map to nonempty field names')
+        for key in ('items_key','api_key_env'):
+            if key in v and (not isinstance(v[key],str) or not v[key] or len(v[key])>100):
+                raise ValueError(key+' must be a nonempty string')
+        if 'terms_url' in v:
+            try: canonical(v['terms_url'])
+            except (ValueError,TypeError,AttributeError): raise ValueError('terms_url must be a public HTTP(S) URL')
+        return v
 
 @app.get('/api/sources',dependencies=[Depends(authorized)])
 def sources(db=Depends(db_session)):
@@ -300,7 +337,7 @@ def update_source(id:str,body:SourceBody,db=Depends(db_session)):
     except Exception: raise HTTPException(422,'Use a public HTTP(S) feed URL')
     duplicate=db.scalar(select(Source.id).where(Source.url==canonical(body.url),Source.id!=id))
     if duplicate: raise HTTPException(409,'Source already exists')
-    for key,value in body.model_dump().items(): setattr(source,key,value)
+    for key,value in {**body.model_dump(),'url':canonical(body.url)}.items(): setattr(source,key,value)
     for article in db.scalars(select(Article).where(Article.source_id==id)):
         article.origin_group=body.origin_group
     audit(db,'source_updated',id)

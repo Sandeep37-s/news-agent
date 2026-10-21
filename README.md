@@ -49,6 +49,7 @@ You choose the story. You review the evidence. You approve production and publis
 - **Consistent 2D presentation:** permanent anchor/newsroom references, story pacing, layered illustrations, limited character animation, maps, timelines and charts are included in both prompts. The downstream agent checks available references and tools before production; the studio supplies text only.
 - **Episode direction:** choose target length, story structure, 2D animation style and anchor screen time. Both prompts receive the same current evidence snapshot, source IDs, dates and research-gap notes.
 - **Saved prompt versions:** reopen the latest 20 snapshots per story, with separate/combined copy and downloads. Older story-only records stay accessible; regenerate to add a picture prompt and apply current rules.
+- **Draft recovery:** unsaved story edits survive refreshes and story switching in the same browser tab. Save edits or generate a pair for durable studio storage. Expired sessions return to sign-in with draft recovery.
 - **Telegram:** receive eligible alerts through your own configured bot, with delivery tracking, retry handling, and duplicate suppression.
 - **Activity and settings:** review monitoring results, source errors, connection status, and persistent configuration.
 
@@ -187,10 +188,12 @@ Database/process locks prevent overlapping monitor runs. Research and decisions 
 
 ## Verification
 
-**36 automated tests passed locally**, and the production Next.js build passed. Tests cover current-edits-only evidence snapshots, production preference validation, authenticated prompt-history retrieval, headline-only research warnings, separate/combined downloads, legacy prompt preservation, stale global alert expiry, undated alert suppression, category boundaries and conservative box-office candidates. These are recorded development checks, not a hosted CI badge.
+**56 backend tests and 6 frontend tests passed locally**, and the production Next.js build passed. Checks cover evidence snapshots, prompt history, browser drafts, session/error handling, migrations, feed redirects and malformed entries, alert eligibility at delivery, Telegram failure handling and existing editorial rules. The [GitHub checks workflow](.github/workflows/checks.yml) runs tests and builds on pushes and pull requests; check its actual run status before treating a commit as verified remotely.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
+npm.cmd --prefix frontend test
+npm.cmd --prefix frontend run typecheck
 npm.cmd --prefix frontend run build
 ```
 
@@ -203,6 +206,7 @@ See **[Verification notes](docs/VALIDATION.md)** for limitations and the externa
 | Start here | Go deeper |
 | :--- | :--- |
 | [Install on your laptop](LAPTOP-SETUP.md) | [Development and configuration](docs/DEVELOPMENT.md) |
+| [Review coverage](docs/CODE-REVIEW.md) | [Automated checks](.github/workflows/checks.yml) |
 | [Quick operating guide](QUICK-START.md) | [Telegram setup](docs/TELEGRAM.md) |
 | [Original project brief](docs/PROJECT-BRIEF.md) | [Azure deployment](docs/AZURE.md) |
 | [Entertainment requirements](docs/ENTERTAINMENT-REQUIREMENTS.md) | [Operations and troubleshooting](docs/OPERATIONS.md) |

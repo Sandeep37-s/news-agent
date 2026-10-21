@@ -37,12 +37,26 @@ def send(chat_id,text):
     try:
         with httpx.Client(timeout=15,trust_env=False) as client:
             response=client.post('https://api.telegram.org/bot'+env.telegram_bot_token+'/sendMessage',json={'chat_id':chat_id,'text':text[:4096],'link_preview_options':{'is_disabled':True}})
-        data=response.json()
-        if response.status_code==429:
-            return 'pending','Telegram rate limited',max(1,int(data.get('parameters',{}).get('retry_after',60)))
         if response.status_code>=500:
             return 'pending','Telegram temporary server failure',60
-        if response.status_code==200 and data.get('ok'):
+        if response.status_code==429:
+            try:
+                data=response.json()
+                delay=int(data.get('parameters',{}).get('retry_after',60))
+            except (ValueError,TypeError,AttributeError,OverflowError):
+                delay=60
+            if delay>86400:
+                return 'failed','Telegram requested an extended wait; review the bot status before retrying',0
+            return 'pending','Telegram rate limited',max(1,delay)
+        if response.status_code!=200:
+            return 'failed','Telegram rejected request; check token/chat permissions',0
+        try:
+            data=response.json()
+        except ValueError:
+            return 'uncertain','Telegram response was unreadable; verify delivery before retrying',0
+        if not isinstance(data,dict):
+            return 'uncertain','Telegram response was unreadable; verify delivery before retrying',0
+        if response.status_code==200 and data.get('ok') is True:
             return 'sent','',0
         return 'failed','Telegram rejected request; check token/chat permissions',0
     except (httpx.TimeoutException,httpx.NetworkError):
@@ -58,13 +72,18 @@ def queue(db,story):
     db.commit()
 
 def deliver(db,language='en',sender=send):
+    from .db import Setting
+    settings=db.get(Setting,'monitoring').value
     for note in db.scalars(select(Notification).where(Notification.status=='pending',Notification.next_attempt<=now()).limit(30)):
         if note.attempts>=5:
             note.status='failed'
             continue
         story=db.get(Story,note.story_id)
-        if story.status in ('rejected','archived','dismissed'):
+        threshold=settings['global_threshold'] if story and story.region=='global' else settings['alert_threshold']
+        if not story or story.status in ('rejected','archived','dismissed') or not story.scoring.get('eligible') or story.score<threshold or story.category not in settings['categories']:
             note.status='suppressed'
+            note.error='Story no longer meets the current alert rules'
+            note.updated_at=now()
             continue
         if note.chat_id not in recipients():
             note.status='suppressed'
