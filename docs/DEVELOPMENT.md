@@ -80,7 +80,7 @@ The Windows task runs once per hour while this computer can run tasks. It is not
 
 The hourly Windows task has been installed on this machine as `DrishtiHourlyDiscovery`, and successful scheduled runs have been observed. You do not need to install it again here. Use `Stop-Studio.ps1` to stop the local dashboard/API; that does not disable the separate monitoring task.
 
-Azure uses a native Container Apps Job with cron `0 * * * *`, one replica, a 30-minute timeout, and no permanent polling loop. PostgreSQL advisory locking also prevents overlap with manual runs. A process exit releases the lock; the next owner records abandoned runs as interrupted. Change both the dashboard's interval and the actual external scheduler together. The next-run display is explicitly an estimate, not proof that a scheduler is installed.
+Azure uses a native Container Apps Job with cron `0 * * * *`, one replica, a default 10-minute timeout (configurable up to 30 minutes), and no permanent polling loop. PostgreSQL advisory locking also prevents overlap with manual runs. A process exit releases the lock; the next owner records abandoned runs as interrupted. Change both the dashboard's interval and the actual external scheduler together. The next-run display is explicitly an estimate, not proof that a scheduler is installed.
 
 ## Editorial and entertainment behavior
 
@@ -132,3 +132,7 @@ PostgreSQL and API have no public host ports. Only the web service binds localho
 See `docs/AZURE.md` for deployment, secrets, migration job, hourly scheduling, health checks, recurring costs and subscription prerequisites. No Azure resources have been created or billed by this project setup.
 
 See `docs/OPERATIONS.md` for backup, recovery and failure diagnosis.
+
+## Worker efficiency
+
+ETag/Last-Modified validators are internal source state, invalidated by source edits. A valid 304 is shown as `not_modified` and counts as successful retrieval, while scoring/recovery still run. Ingestion commits per source; research and ranking use 200-story batches. Feed limits are configured with `SOURCE_REQUEST_TIMEOUT_SECONDS`, `SOURCE_FETCH_BUDGET_SECONDS` and `SOURCE_MAX_ATTEMPTS` in the server environment. See [Azure cost design](AZURE-COSTS.md) for deployment sizes and limitations.

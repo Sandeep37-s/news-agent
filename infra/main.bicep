@@ -9,6 +9,26 @@ param frontendImage string
 param keyVaultUri string
 param dashboardUrl string
 param cronExpression string = '0 * * * *'
+@allowed(['small', 'standard'])
+param apiSize string = 'small'
+@allowed(['small', 'standard'])
+param webSize string = 'small'
+@allowed(['small', 'standard'])
+param workerSize string = 'small'
+@minValue(60)
+@maxValue(1800)
+param monitorTimeoutSeconds int = 600
+param enableTelegram bool = false
+var resourceSizes = {
+  small: {
+    cpu: json('0.25')
+    memory: '0.5Gi'
+  }
+  standard: {
+    cpu: json('0.5')
+    memory: '1Gi'
+  }
+}
 resource environment 'Microsoft.App/managedEnvironments@2025-01-01' existing = {
   name: environmentName
 }
@@ -22,22 +42,12 @@ var identityBlock = {
     }
   }
 }
-var secrets = [
-  {
-    name: 'database-url'
-    keyVaultUrl: '${keyVaultUri}secrets/database-url'
-    identity: identity.id
-  }
-  {
-    name: 'admin-password'
-    keyVaultUrl: '${keyVaultUri}secrets/admin-password'
-    identity: identity.id
-  }
-  {
-    name: 'session-secret'
-    keyVaultUrl: '${keyVaultUri}secrets/session-secret'
-    identity: identity.id
-  }
+var databaseSecret = {
+  name: 'database-url'
+  keyVaultUrl: '${keyVaultUri}secrets/database-url'
+  identity: identity.id
+}
+var telegramSecrets = enableTelegram ? [
   {
     name: 'telegram-token'
     keyVaultUrl: '${keyVaultUri}secrets/telegram-token'
@@ -48,8 +58,31 @@ var secrets = [
     keyVaultUrl: '${keyVaultUri}secrets/telegram-chats'
     identity: identity.id
   }
-]
-var environmentVariables = [
+] : []
+var secrets = concat([
+  databaseSecret
+  {
+    name: 'admin-password'
+    keyVaultUrl: '${keyVaultUri}secrets/admin-password'
+    identity: identity.id
+  }
+  {
+    name: 'session-secret'
+    keyVaultUrl: '${keyVaultUri}secrets/session-secret'
+    identity: identity.id
+  }
+], telegramSecrets)
+var telegramEnvironment = enableTelegram ? [
+  {
+    name: 'TELEGRAM_BOT_TOKEN'
+    secretRef: 'telegram-token'
+  }
+  {
+    name: 'TELEGRAM_CHAT_IDS'
+    secretRef: 'telegram-chats'
+  }
+] : []
+var environmentVariables = concat([
   {
     name: 'DATABASE_URL'
     secretRef: 'database-url'
@@ -63,14 +96,6 @@ var environmentVariables = [
     secretRef: 'session-secret'
   }
   {
-    name: 'TELEGRAM_BOT_TOKEN'
-    secretRef: 'telegram-token'
-  }
-  {
-    name: 'TELEGRAM_CHAT_IDS'
-    secretRef: 'telegram-chats'
-  }
-  {
     name: 'COOKIE_SECURE'
     value: 'true'
   }
@@ -78,7 +103,17 @@ var environmentVariables = [
     name: 'DASHBOARD_URL'
     value: dashboardUrl
   }
-]
+], telegramEnvironment)
+var workerEnvironment = concat([
+  {
+    name: 'DATABASE_URL'
+    secretRef: 'database-url'
+  }
+  {
+    name: 'DASHBOARD_URL'
+    value: dashboardUrl
+  }
+], telegramEnvironment)
 var registries = [
   {
     server: registryServer
@@ -91,6 +126,7 @@ resource api 'Microsoft.App/containerApps@2025-01-01' = {
   identity: identityBlock
   properties: {
     managedEnvironmentId: environment.id
+    workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
       secrets: secrets
@@ -108,10 +144,7 @@ resource api 'Microsoft.App/containerApps@2025-01-01' = {
           name: 'api'
           image: backendImage
           env: environmentVariables
-          resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
-          }
+          resources: resourceSizes[apiSize]
           probes: [
             {
               type: 'Readiness'
@@ -120,7 +153,7 @@ resource api 'Microsoft.App/containerApps@2025-01-01' = {
                 port: 8000
               }
               initialDelaySeconds: 10
-              periodSeconds: 15
+              periodSeconds: 30
             }
           ]
         }
@@ -138,6 +171,7 @@ resource web 'Microsoft.App/containerApps@2025-01-01' = {
   identity: identityBlock
   properties: {
     managedEnvironmentId: environment.id
+    workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
       registries: registries
@@ -159,10 +193,7 @@ resource web 'Microsoft.App/containerApps@2025-01-01' = {
               value: 'https://${api.properties.configuration.ingress.fqdn}'
             }
           ]
-          resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
-          }
+          resources: resourceSizes[webSize]
           probes: [
             {
               type: 'Readiness'
@@ -171,7 +202,7 @@ resource web 'Microsoft.App/containerApps@2025-01-01' = {
                 port: 3000
               }
               initialDelaySeconds: 10
-              periodSeconds: 15
+              periodSeconds: 30
             }
           ]
         }
@@ -189,11 +220,12 @@ resource monitor 'Microsoft.App/jobs@2025-01-01' = {
   identity: identityBlock
   properties: {
     environmentId: environment.id
+    workloadProfileName: 'Consumption'
     configuration: {
       triggerType: 'Schedule'
-      replicaTimeout: 1800
+      replicaTimeout: monitorTimeoutSeconds
       replicaRetryLimit: 0
-      secrets: secrets
+      secrets: concat([databaseSecret], telegramSecrets)
       registries: registries
       scheduleTriggerConfig: {
         cronExpression: cronExpression
@@ -211,11 +243,8 @@ resource monitor 'Microsoft.App/jobs@2025-01-01' = {
             '-m'
             'backend.monitor'
           ]
-          env:environmentVariables
-          resources:{
-            cpu:json('0.5')
-            memory:'1Gi'
-          }
+          env:workerEnvironment
+          resources:resourceSizes[workerSize]
         }
       ]
     }
@@ -227,11 +256,12 @@ resource migrate 'Microsoft.App/jobs@2025-01-01' = {
   identity: identityBlock
   properties: {
     environmentId: environment.id
+    workloadProfileName: 'Consumption'
     configuration: {
       triggerType: 'Manual'
       replicaTimeout: 300
       replicaRetryLimit: 0
-      secrets: secrets
+      secrets: [databaseSecret]
       registries: registries
       manualTriggerConfig: {
         parallelism: 1
@@ -248,11 +278,13 @@ resource migrate 'Microsoft.App/jobs@2025-01-01' = {
             '-c'
             'alembic upgrade head && python -m backend.bootstrap'
           ]
-          env:environmentVariables
-          resources:{
-            cpu:json('0.5')
-            memory:'1Gi'
-          }
+          env: [
+            {
+              name: 'DATABASE_URL'
+              secretRef: 'database-url'
+            }
+          ]
+          resources:resourceSizes[workerSize]
         }
       ]
     }

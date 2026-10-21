@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import create_engine, String, Text, Integer, Float, Boolean, JSON, ForeignKey, UniqueConstraint
+from sqlalchemy import create_engine, String, Text, Integer, Float, Boolean, JSON, ForeignKey, UniqueConstraint, Index, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from .config import env
 
@@ -25,6 +25,7 @@ class Source(Base):
     primary: Mapped[bool] = mapped_column(Boolean, default=False)
     origin_group: Mapped[str] = mapped_column(String(100), default='unknown')
     options: Mapped[dict] = mapped_column(JSON, default=dict)
+    fetch_state: Mapped[dict] = mapped_column(JSON, default=dict)
 
 class Story(Base):
     __tablename__ = 'stories'
@@ -57,6 +58,7 @@ class Article(Base):
 
 class Run(Base):
     __tablename__ = 'runs'
+    __table_args__ = (Index('ix_runs_started_at','started_at'),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     status: Mapped[str] = mapped_column(String(30), default='running')
     started_at: Mapped[str] = mapped_column(String(40), default=now)
@@ -67,7 +69,7 @@ class Run(Base):
 
 class Notification(Base):
     __tablename__ = 'notifications'
-    __table_args__ = (UniqueConstraint('story_id', 'chat_id'),)
+    __table_args__ = (UniqueConstraint('story_id', 'chat_id'),Index('ix_notifications_due','status','next_attempt'))
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     story_id: Mapped[str] = mapped_column(ForeignKey('stories.id'))
     chat_id: Mapped[str] = mapped_column(String(100))
@@ -85,6 +87,7 @@ class Setting(Base):
 
 class Audit(Base):
     __tablename__ = 'audit'
+    __table_args__ = (Index('ix_audit_action_created','action','created_at'),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     action: Mapped[str] = mapped_column(String(100))
     subject: Mapped[str] = mapped_column(String(100))
@@ -93,6 +96,7 @@ class Audit(Base):
 
 class Prompt(Base):
     __tablename__ = 'prompts'
+    __table_args__ = (Index('ix_prompts_story_created','story_id','created_at'),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     story_id: Mapped[str] = mapped_column(ForeignKey('stories.id'))
     content: Mapped[str] = mapped_column(Text)
@@ -102,6 +106,12 @@ class Prompt(Base):
     created_at: Mapped[str] = mapped_column(String(40), default=now)
 
 engine = create_engine(env.database_url, pool_pre_ping=True, **({'connect_args': {'check_same_thread': False, 'timeout': 30}} if env.database_url.startswith('sqlite') else {}))
+if engine.dialect.name=='sqlite':
+    @event.listens_for(engine,'connect')
+    def sqlite_foreign_keys(connection,record):
+        cursor=connection.cursor()
+        cursor.execute('PRAGMA foreign_keys=ON')
+        cursor.close()
 Session = sessionmaker(engine, expire_on_commit=False)
 
 def audit(db, action, subject, **details):

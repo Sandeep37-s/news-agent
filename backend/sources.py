@@ -1,4 +1,6 @@
 import html
+import hashlib
+import json
 import ipaddress
 import os
 import re
@@ -8,6 +10,47 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, urljoin
 import feedparser
 import httpx
+from .config import env
+
+
+class SourceBudgetExceeded(ValueError):
+    pass
+
+
+class FetchResult(bytes):
+    def __new__(cls,content=b'',*,validators=None,not_modified=False):
+        obj=super().__new__(cls,content)
+        obj.validators=validators or {}
+        obj.not_modified=not_modified
+        return obj
+
+
+class SourceBatch(list):
+    def __init__(self,rows=(),*,fetch_state=None,not_modified=False):
+        super().__init__(rows)
+        self.fetch_state=fetch_state or {}
+        self.not_modified=not_modified
+
+
+def source_key(source):
+    value=json.dumps([source.url,source.kind,source.options or {}],sort_keys=True)
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def conditional_headers(source):
+    state=getattr(source,'fetch_state',None) or {}
+    if state.get('config_key')!=source_key(source):
+        return {}
+    return {header:state[key] for header,key in [('If-None-Match','etag'),('If-Modified-Since','last_modified')] if state.get(key)}
+
+
+def source_batch(source,body,rows=()):
+    not_modified=getattr(body,'not_modified',False)
+    validators=getattr(body,'validators',{})
+    if not_modified:
+        validators={**(getattr(source,'fetch_state',None) or {}),**validators}
+    state={'config_key':source_key(source),**{key:validators[key] for key in ('etag','last_modified') if validators.get(key)}}
+    return SourceBatch(rows,fetch_state=state if rows or not_modified else {},not_modified=not_modified)
 
 def clean(value, limit=600):
     return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]*>', '', str(value or '')))).strip()[:limit]
@@ -30,13 +73,29 @@ def public_url(url):
 
 def fetch_bytes(url, headers=None):
     # Every redirect is validated. Production also requires outbound network restrictions.
-    for attempt in range(3):
+    deadline=time.monotonic()+env.source_fetch_budget_seconds
+    for attempt in range(env.source_max_attempts):
         try:
-            with httpx.Client(timeout=20, follow_redirects=False, trust_env=False) as client:
+            with httpx.Client(timeout=env.source_request_timeout_seconds, follow_redirects=False, trust_env=False) as client:
                 current = url
                 for _ in range(5):
+                    remaining=deadline-time.monotonic()
+                    if remaining<=0:
+                        raise SourceBudgetExceeded('Source fetch time budget exceeded')
                     public_url(current)
-                    with client.stream('GET', current, headers={'User-Agent':'HindiNewsStudio/1.0 (RSS reader)', **(headers or {})}) as response:
+                    remaining=deadline-time.monotonic()
+                    if remaining<=0:
+                        raise SourceBudgetExceeded('Source fetch time budget exceeded')
+                    with client.stream('GET', current, timeout=min(remaining,env.source_request_timeout_seconds), headers={'User-Agent':'HindiNewsStudio/1.0 (RSS reader)', **(headers or {})}) as response:
+                        validators={}
+                        for key,header in [('etag','etag'),('last_modified','last-modified')]:
+                            value=response.headers.get(header,'')
+                            if value and len(value)<=1024 and value.isascii() and '\r' not in value and '\n' not in value:
+                                validators[key]=value
+                        if response.status_code==304:
+                            if not any(key.lower() in ('if-none-match','if-modified-since') for key in (headers or {})):
+                                raise ValueError('Unexpected not-modified response without a cached validator')
+                            return FetchResult(validators=validators,not_modified=True)
                         if response.is_redirect:
                             target=urljoin(current,response.headers['location'])
                             old_origin,new_origin=urlsplit(current),urlsplit(target)
@@ -49,13 +108,15 @@ def fetch_bytes(url, headers=None):
                         response.raise_for_status()
                         content=bytearray()
                         for chunk in response.iter_bytes():
+                            if time.monotonic()>deadline:
+                                raise SourceBudgetExceeded('Source fetch time budget exceeded')
                             content.extend(chunk)
                             if len(content)>2_000_000:
                                 raise ValueError('Source response exceeds 2 MB')
-                        return bytes(content)
+                        return FetchResult(content,validators=validators)
                 raise ValueError('Too many source redirects')
         except (httpx.TimeoutException,httpx.NetworkError):
-            if attempt==2:
+            if attempt==env.source_max_attempts-1:
                 raise
             time.sleep(2**attempt)
 
@@ -89,12 +150,15 @@ def parse_feed(content):
 
 class RSSAdapter:
     def collect(self, source):
-        rows=parse_feed(fetch_bytes(source.url))
+        body=fetch_bytes(source.url,conditional_headers(source))
+        if getattr(body,'not_modified',False):
+            return source_batch(source,body)
+        rows=parse_feed(body)
         if source.options.get('headlines_only'):
             # Discovery mode retains a link and minimal feed metadata, not article
             # excerpts, images, transcripts or footage for downstream republishing.
             rows=[{**row,'summary':''} for row in rows]
-        return rows
+        return source_batch(source,body,rows)
 
 class JSONAdapter:
     """Licensed API/search adapter: JSON list under items_key, configurable field map."""
@@ -102,7 +166,11 @@ class JSONAdapter:
         import json
         options=source.options
         key=os.environ.get(options.get('api_key_env',''),'')
-        data=json.loads(fetch_bytes(source.url, {'Authorization':f'Bearer {key}'} if key else None))
+        headers={**conditional_headers(source),**({'Authorization':f'Bearer {key}'} if key else {})}
+        body=fetch_bytes(source.url,headers)
+        if getattr(body,'not_modified',False):
+            return source_batch(source,body)
+        data=json.loads(body)
         rows=data.get(options.get('items_key','articles'),[]) if isinstance(data,dict) else data
         if not isinstance(rows,list):
             raise ValueError('API result must be a list')
@@ -115,6 +183,6 @@ class JSONAdapter:
                 result.append({'title':clean(row.get(mapping.get('title','title')),300),'summary':clean(row.get(mapping.get('summary','description')),500),'url':canonical(row.get(mapping.get('url','url'),'')),'published_at':parsed_date(row.get(mapping.get('published_at','publishedAt'))),'event_at':parsed_date(row.get(mapping.get('event_at','eventAt')))})
             except ValueError:
                 continue
-        return [r for r in result if r['title']]
+        return source_batch(source,body,[r for r in result if r['title']])
 
 ADAPTERS={'rss':RSSAdapter(), 'json':JSONAdapter()}

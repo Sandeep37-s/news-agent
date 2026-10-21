@@ -9,6 +9,11 @@
     "frontendImage": {"value":"YOUR-REGISTRY.azurecr.io/drishti-web:v1"},
     "keyVaultUri": {"value":"https://YOUR-VAULT.vault.azure.net/"},
     "dashboardUrl": {"value":"https://YOUR-DASHBOARD-HOST"},
-    "cronExpression": {"value":"0 * * * *"}
+    "cronExpression": {"value":"0 * * * *"},
+    "apiSize": {"value":"small"},
+    "webSize": {"value":"small"},
+    "workerSize": {"value":"small"},
+    "monitorTimeoutSeconds": {"value":600},
+    "enableTelegram": {"value":false}
   }
 }

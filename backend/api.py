@@ -316,7 +316,7 @@ class SourceBody(BaseModel):
 
 @app.get('/api/sources',dependencies=[Depends(authorized)])
 def sources(db=Depends(db_session)):
-    return [serialize(s) for s in db.scalars(select(Source))]
+    return [{k:v for k,v in serialize(s).items() if k!='fetch_state'} for s in db.scalars(select(Source))]
 
 @app.post('/api/sources',dependencies=[Depends(authorized)])
 def add_source(body:SourceBody,db=Depends(db_session)):
@@ -337,6 +337,7 @@ def update_source(id:str,body:SourceBody,db=Depends(db_session)):
     except Exception: raise HTTPException(422,'Use a public HTTP(S) feed URL')
     duplicate=db.scalar(select(Source.id).where(Source.url==canonical(body.url),Source.id!=id))
     if duplicate: raise HTTPException(409,'Source already exists')
+    source.fetch_state={}
     for key,value in {**body.model_dump(),'url':canonical(body.url)}.items(): setattr(source,key,value)
     for article in db.scalars(select(Article).where(Article.source_id==id)):
         article.origin_group=body.origin_group

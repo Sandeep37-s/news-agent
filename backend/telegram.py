@@ -69,7 +69,7 @@ def queue(db,story):
     for chat_id in recipients():
         if not db.scalar(select(Notification).where(Notification.story_id==story.id,Notification.chat_id==chat_id)):
             db.add(Notification(story_id=story.id,chat_id=chat_id))
-    db.commit()
+
 
 def deliver(db,language='en',sender=send):
     from .db import Setting

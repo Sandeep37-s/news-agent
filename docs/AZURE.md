@@ -4,6 +4,8 @@ No subscription, resource group, region, budget or production credentials were s
 
 ## Prerequisites
 
+Use the [cost-conscious design](AZURE-COSTS.md). The existing environment must provide the built-in **Consumption** workload profile. Default container sizes are 0.25 vCPU / 0.5 GiB, adjustable per component using `apiSize`, `webSize` and `workerSize` (`standard` = 0.5 vCPU / 1 GiB). Validate memory and cold starts in the real environment before production use.
+
 Use an approved Azure subscription and resource group, Azure Container Registry, an existing Container Apps managed environment, a user-assigned managed identity, Key Vault and managed PostgreSQL Flexible Server. Place the environment and database on a compatible private network with working private DNS. Disable public database access. The template deliberately reuses these resources rather than making a database publicly reachable or selecting a paid subscription for you.
 
 Grant the managed identity `AcrPull` on the registry and `Key Vault Secrets User` on the vault. Limit permissions to these resource scopes. Restrict dashboard access using your organization's access gateway/IP controls in addition to the application's password. A production identity provider/MFA can be placed in front of the web application. The API's ingress is internal; do not publish port 8000.
@@ -15,10 +17,10 @@ Key Vault secrets required by the template:
 | `database-url` | `postgresql+psycopg://USER:URL_ENCODED_PASSWORD@PRIVATE_HOST:5432/studio?sslmode=require` |
 | `admin-password` | A unique random password of at least 16 characters |
 | `session-secret` | A unique random value of at least 32 characters |
-| `telegram-token` | Your official bot token |
-| `telegram-chats` | Authorized comma-separated chat IDs |
+| `telegram-token` | Your official bot token, only with `enableTelegram=true` |
+| `telegram-chats` | Authorized comma-separated chat IDs, only with `enableTelegram=true` |
 
-For deployment without Telegram, use nonempty sentinel values `disabled` for token and ` ` for chats (no authorized recipients), or remove both secret references and corresponding environment entries from the template. Never use mock IDs with a real token. Set optional AI environment and Key Vault references only if you intend to use a paid provider.
+For deployment without Telegram, retain `enableTelegram=false` (the default); Telegram secret references are omitted. The monitor receives database and optional Telegram credentials; the migration job receives only the database credential. Never use mock IDs with a real token. Set optional AI environment and Key Vault references only if you intend to use a paid provider.
 
 Use the Azure Portal or secure secret-input mechanisms; do not paste secrets into `parameters.example.json`, shell history, Git, or chat. Use private endpoints/network controls and the environment's outbound restrictions to allow only configured news/provider destinations, Telegram, Key Vault and database connectivity. DNS validation in the app is a supplementary check, not a full SSRF network boundary.
 
@@ -56,7 +58,7 @@ az containerapp job start --name drishti-monitor --resource-group YOUR_GROUP
 az containerapp job execution list --name drishti-monitor --resource-group YOUR_GROUP
 ```
 
-The [Container Apps Jobs documentation](https://learn.microsoft.com/en-us/azure/container-apps/jobs) describes scheduled execution. `0 * * * *` means the top of every hour in UTC, independent of your computer or browser. Job parallelism is one, timeout 1,800 seconds, and the app's PostgreSQL advisory lock prevents concurrent manual/scheduled workers. External requests and outbox retries are bounded. Do not replace the hourly schedule with frequent polling.
+The [Container Apps Jobs documentation](https://learn.microsoft.com/en-us/azure/container-apps/jobs) describes scheduled execution. `0 * * * *` means the top of every hour in UTC, independent of your computer or browser. Job parallelism is one, the default timeout is 600 seconds (`monitorTimeoutSeconds`, allowed 60–1,800), automatic job retries are zero, and the app's PostgreSQL advisory lock prevents concurrent manual/scheduled workers. External requests and outbox retries are bounded. Do not replace the hourly schedule with frequent polling.
 
 To change cadence, update the Bicep `cronExpression`, deploy, and save matching `interval_minutes` in the dashboard. Calendar schedules are authoritative; the dashboard estimate can be stale after manual runs or missed executions.
 

@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from pathlib import Path
 import portalocker
 from sqlalchemy import text
 from .config import ROOT
@@ -19,7 +20,11 @@ def monitoring_lock():
             finally:
                 connection.execute(text('SELECT pg_advisory_unlock(84219017)'))
     else:
-        lock=portalocker.Lock(str(ROOT/'data/monitor.lock'),timeout=0)
+        # A test or second checkout with its own database must not contend with
+        # the real hourly worker. Preserve the existing default data/monitor.lock.
+        database=engine.url.database
+        directory=Path(database).resolve().parent if database and database!=':memory:' else ROOT/'data'
+        lock=portalocker.Lock(str(directory/'monitor.lock'),timeout=0)
         try:
             lock.acquire()
         except portalocker.LockException as exc:

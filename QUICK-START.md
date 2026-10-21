@@ -15,7 +15,7 @@ The Windows hourly monitoring task is installed as `DrishtiHourlyDiscovery` and 
 
 Settings and editorial decisions are saved in `data/studio.db`. Initial parameter files are in `config/`. Server secrets stay in `.env`. Full setup, Telegram instructions, Azure deployment, and troubleshooting are in `README.md` and `docs/`.
 
-Verified: 56 backend tests and 6 frontend tests pass, the production dashboard builds, and prior live feed and prompt-copy checks pass. The code review and remaining deployment checks are recorded in `docs/CODE-REVIEW.md` and `docs/VALIDATION.md`.
+Verified: 65 backend tests and 6 frontend tests pass, the production dashboard builds, and prior live feed and prompt-copy checks pass. The code review and remaining deployment checks are recorded in `docs/CODE-REVIEW.md` and `docs/VALIDATION.md`.
 
 Connected sources: BBC India/World; NDTV India/Hindi/Movies; Hindustan Times India/Entertainment/Telugu Cinema. NDTV and HT connections collect headlines and links for private discovery, with publisher terms retained in Settings. No API key or paid connection was activated for these RSS feeds. They do not provide a commercial content licence. Important leads still need research before your own original script and approved publishing.
 

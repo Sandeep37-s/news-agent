@@ -52,6 +52,7 @@ You choose the story. You review the evidence. You approve production and publis
 - **Draft recovery:** unsaved story edits survive refreshes and story switching in the same browser tab. Save edits or generate a pair for durable studio storage. Expired sessions return to sign-in with draft recovery.
 - **Telegram:** receive eligible alerts through your own configured bot, with delivery tracking, retry handling, and duplicate suppression.
 - **Activity and settings:** review monitoring results, source errors, connection status, and persistent configuration.
+- **Cost-conscious deployment:** conditional feed requests, batched database work, indexed queries, small Consumption containers and short hourly jobs. See [Azure cost design](docs/AZURE-COSTS.md); database and other resource charges remain separate.
 
 <details>
 <summary><strong>See the prompt builder</strong></summary>
@@ -188,7 +189,7 @@ Database/process locks prevent overlapping monitor runs. Research and decisions 
 
 ## Verification
 
-**56 backend tests and 6 frontend tests passed locally**, and the production Next.js build passed. Checks cover evidence snapshots, prompt history, browser drafts, session/error handling, migrations, feed redirects and malformed entries, alert eligibility at delivery, Telegram failure handling and existing editorial rules. The [GitHub checks workflow](.github/workflows/checks.yml) runs tests and builds on pushes and pull requests; check its actual run status before treating a commit as verified remotely.
+**65 backend tests and 6 frontend tests passed locally**, and the production Next.js build passed. Checks cover evidence snapshots, prompt history, browser drafts, session/error handling, migrations, feed redirects and malformed entries, alert eligibility at delivery, Telegram failure handling and existing editorial rules. The [GitHub checks workflow](.github/workflows/checks.yml) runs tests and builds on pushes and pull requests; check its actual run status before treating a commit as verified remotely.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
@@ -199,7 +200,7 @@ npm.cmd --prefix frontend run build
 
 Tests use fixtures and a temporary database. They cover parsing, deduplication, clustering, ranking, classification, scheduler locking and recovery, migrations, authentication, configuration, Telegram failure handling, prompt export, AI budgets, and headline-only collection.
 
-See **[Verification notes](docs/VALIDATION.md)** for limitations and the external checks still required, including real Telegram/AI credentials, Docker, managed PostgreSQL, Bicep compilation, and an actual Azure deployment.
+See **[Verification notes](docs/VALIDATION.md)** for limitations and the external checks still required, including real Telegram/AI credentials, Docker, managed PostgreSQL and an actual Azure deployment.
 
 ## Documentation
 
