@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" role="img" aria-labelledby="title description">
+  <title id="title">Drishti — Hindi News Discovery Studio</title>
+  <desc id="description">A green and ivory editorial masthead with India, cinema, and world news cards. Discover, verify, review, and brief.</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f8f9f2"/>
+      <stop offset="1" stop-color="#e7edda"/>
+    </linearGradient>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#173c37" opacity=".10"/>
+    </pattern>
+    <clipPath id="frame"><rect width="1280" height="420" rx="24"/></clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect width="1280" height="420" fill="url(#paper)"/>
+    <rect x="760" width="520" height="420" fill="url(#grid)"/>
+    <circle cx="1115" cy="210" r="235" fill="none" stroke="#b9caa4"/>
+    <circle cx="1115" cy="210" r="195" fill="#e1eacb" stroke="#a9bd91"/>
+    <circle cx="1115" cy="210" r="155" fill="none" stroke="#bdcca8"/>
+    <path d="M770 210h444M1115 0v420" stroke="#becdae" stroke-dasharray="4 8"/>
+    <rect x="52" y="44" width="9" height="29" rx="4" fill="#24574c"/>
+    <text x="78" y="65" fill="#24574c" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="3">THE EDITORIAL DESK</text>
+    <text x="52" y="182" fill="#173c37" font-family="Georgia, 'Times New Roman', serif" font-size="91" letter-spacing="4">DRISHTI</text>
+    <text x="57" y="230" fill="#24574c" font-family="Arial, Helvetica, sans-serif" font-size="18" letter-spacing="3">HINDI NEWS DISCOVERY STUDIO</text>
+    <text x="56" y="289" fill="#526c60" font-family="Arial, Helvetica, sans-serif" font-size="24">From a headline to your own perspective.</text>
+    <text x="56" y="338" fill="#173c37" font-family="Arial, Helvetica, sans-serif" font-size="16" letter-spacing="1">DISCOVER</text>
+    <circle cx="164" cy="332" r="2" fill="#849b71"/>
+    <text x="185" y="338" fill="#173c37" font-family="Arial, Helvetica, sans-serif" font-size="16" letter-spacing="1">VERIFY</text>
+    <circle cx="265" cy="332" r="2" fill="#849b71"/>
+    <text x="286" y="338" fill="#173c37" font-family="Arial, Helvetica, sans-serif" font-size="16" letter-spacing="1">REVIEW</text>
+    <circle cx="371" cy="332" r="2" fill="#849b71"/>
+    <text x="392" y="338" fill="#173c37" font-family="Arial, Helvetica, sans-serif" font-size="16" letter-spacing="1">BRIEF</text>
+    <line x1="56" y1="371" x2="660" y2="371" stroke="#c5d1bc"/>
+    <text x="56" y="395" fill="#75846b" font-family="Arial, Helvetica, sans-serif" font-size="12" letter-spacing="1.5">INDIA FIRST / EVIDENCE AWARE / HUMAN LED</text>
+    <g transform="rotate(-5 1030 207)">
+      <rect x="813" y="87" width="346" height="78" rx="13" fill="#cbd9b8" opacity=".55"/>
+      <rect x="807" y="80" width="346" height="78" rx="13" fill="#ffffff" stroke="#cbd6bf"/>
+      <rect x="825" y="98" width="42" height="42" rx="9" fill="#e6eddb"/>
+      <circle cx="846" cy="119" r="10" fill="none" stroke="#54765b" stroke-width="2"/>
+      <text x="884" y="112" fill="#173c37" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="2">INDIA</text>
+      <rect x="884" y="125" width="177" height="4" rx="2" fill="#cbd7c3"/>
+      <rect x="884" y="136" width="122" height="3" rx="1.5" fill="#e0e6da"/>
+      <text x="1104" y="122" fill="#8fa27d" font-family="Georgia, serif" font-size="24">01</text>
+      <rect x="843" y="183" width="346" height="78" rx="13" fill="#cbd9b8" opacity=".55"/>
+      <rect x="837" y="176" width="346" height="78" rx="13" fill="#ffffff" stroke="#cbd6bf"/>
+      <rect x="855" y="194" width="42" height="42" rx="9" fill="#eee8f3"/>
+      <path d="m876 202 3 9 9 3-9 3-3 9-3-9-9-3 9-3z" fill="none" stroke="#80698c" stroke-width="2"/>
+      <text x="914" y="208" fill="#173c37" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="2">CINEMA</text>
+      <rect x="914" y="221" width="177" height="4" rx="2" fill="#d8cede"/>
+      <rect x="914" y="232" width="122" height="3" rx="1.5" fill="#e9e2ed"/>
+      <text x="1134" y="218" fill="#a190ab" font-family="Georgia, serif" font-size="24">02</text>
+      <rect x="813" y="279" width="346" height="78" rx="13" fill="#cbd9b8" opacity=".55"/>
+      <rect x="807" y="272" width="346" height="78" rx="13" fill="#ffffff" stroke="#cbd6bf"/>
+      <rect x="825" y="290" width="42" height="42" rx="9" fill="#e4ecea"/>
+      <circle cx="846" cy="311" r="11" fill="none" stroke="#65877e" stroke-width="1.5"/>
+      <ellipse cx="846" cy="311" rx="5" ry="11" fill="none" stroke="#65877e" stroke-width="1.5"/>
+      <path d="M835 311h22" stroke="#65877e" stroke-width="1.5"/>
+      <text x="884" y="304" fill="#173c37" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="2">WORLD</text>
+      <rect x="884" y="317" width="177" height="4" rx="2" fill="#c5d5ce"/>
+      <rect x="884" y="328" width="122" height="3" rx="1.5" fill="#e0e8e3"/>
+      <text x="1104" y="314" fill="#8aa399" font-family="Georgia, serif" font-size="24">03</text>
+    </g>
+  </g>
+</svg>
