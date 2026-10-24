@@ -5,7 +5,7 @@ Create one cinematic 16:9 reference illustration for the specific news story des
 ## Visual brief
 Use consistent original 2D anime-inspired illustration, clean shapes, expressive but restrained character design, cinematic lighting, layered foreground/background depth, and a cohesive news-documentary palette. Depict the actual story subject and relevant setting from the supplied context; avoid a generic unrelated news image. Do not invent a date, location, uniform, logo, event detail, statistic or quotation.
 
-If the permanent fictional male anchor or newsroom is included, match the approved reference files supplied separately. Do not create a new identity and pretend it is the approved anchor. Compose the main subject clearly, allow space for later Hindi captions, and keep text and numbers out of the generated artwork unless a verified exact value is explicitly supplied and requested.
+If the permanent fictional female anchor or newsroom is included, match the approved reference files supplied separately. Do not create a new identity and pretend it is the approved anchor. Compose the main subject clearly, allow space for later Hindi captions, and keep text and numbers out of the generated artwork unless a verified exact value is explicitly supplied and requested.
 
 For entertainment, favour original cinema/industry illustrations and story-relevant release, timeline or box-office visual concepts. Do not reproduce film posters, clips, celebrity photographs or trademarks without appropriate permission. Do not invent box-office numbers or a record-breaking claim.
 
